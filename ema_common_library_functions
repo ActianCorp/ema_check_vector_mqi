@@ -1,0 +1,2943 @@
+#!/bin/bash
+#
+# Name:
+#   ema_common_library_functions
+#
+# Usage:
+#   N/A for module as a whole, as script only contains functions,
+#   some of which have input, output and input/output.  For
+#   further details, see the header section of each function.
+#
+# Description:
+#   Set of common functions (library routines) used by the Ingres/Nagios 
+#   monitoring tools (EMA)
+#
+# History:
+#   1.0   02-Feb-2010 (mark.whalley@ingres.com)
+#         Created.
+#
+#   1.1   18-Feb-2010 (mark.whalley@ingres.com)
+#         CLF_SETUPCOMMONVARIABLES: Added II_DATE_FORMAT=MULTINATIONAL4
+#
+#   1.2   22-Feb-2010 (mark.whalley@ingres.com)
+#         Added maxdepth to find in CLF_TIDYUP
+#
+#   1.3   24-Feb-2010 (mark.whalley@ingres.com)
+#         Added clf_cur_yyyy to CLF_CURDATETIME
+#
+#   1.4   15-Mar-2010 (mark.whalley@ingres.com)
+#         Added several more entries to CLF_CURDATETIME
+#
+#   1.5   06-Apr-2010 (mark.whalley@ingres.com)
+#         Added CLF_PROCESS_ISA_CONFIG
+#
+#   1.6   07-Apr-2010 (mark.whalley@ingres.com)
+#         Added CLF_SFTPSINGLEFILE
+#
+#   1.7   08-Apr-2010 (mark.whalley@ingres.com)
+#         Added hostname to CLF_SETUPCOMMONVARIABLES
+#
+#         Added yyyymmddhhmmss to CLF_CURDATETIME
+#
+#   1.8   11-Apr-2010 (mark.whalley@ingres.com)
+#         Pick up FTP_TO_ISA (Y/N) from isa.cfg
+#
+#   1.9   18-Jun-2010 (mark.whalley@ingres.com)
+#         Comment out "chown nagios.nagios" 
+#         in CLF_CREATEFILE
+#
+#   1.10  22-Jun-2010 (mark.whalley@ingres.com)
+#         Added the following functions:
+# 
+#         . CLF_OPENIINAMUFEED
+#         . CLF_KILLPID
+#         . CLF_GETIINAMUSERVERS
+#
+#   1.11  29-Jun-2010 (mark.whalley@ingres.com)
+#         Reverted to KSH
+#
+#   1.12  01-Jul-2010 (mark.whalley@ingres.com)
+#         Send standard output for kill in CLF_KILLPID
+#         to /dev/null as ksh reports background
+#         process details being killed whereas bash
+#         did not :-(
+#
+#         Added a "shell script" temporary file to
+#         CLF_CREATELOGFILES.
+#
+#         Removed a number of unused (commented out)
+#         functions
+#
+#         Removed a number of unused (commented out)
+#         functions
+#
+#   1.13  08-Jul-2010 (mark.whalley@ingres.com)
+#         Disclaimer and contact details added.
+#
+#   1.14  20-Jul-2010 (mark.whalley@ingres.com)
+#         Removed the need for nagios return status to be supplied to
+#         TIDYUP
+#
+#   1.15  11-Aug-2010 (mark.whalley@ingres.com)
+#         New function:
+#
+#         . CLF_TIME_T_TO_INGRES_DATE
+#
+#         Added the following to CLF_PROCESS_ISA_CONFIG:
+#
+#         . PERFDATALOG
+#         . ISADB
+#         . ISADBA
+#
+#   1.16  09-Sep-2010 (mark.whalley@ingres.com)
+#         If the script name does not start "check_isa", then set the
+#         temporary directory to $PWD (CLF_PROCESS_ISA_CONFIG).  
+#         This can be used for scripts that are not called as a Nagios 
+#         Plugin to use the current working directory.
+#
+#   1.17  30-Sep-2010 (mark.whalley@ingres.com)
+#
+#         Add II_VWDATA to CLF_GETINGPRENV.
+#
+#         New functions:
+#
+#         . CLF_SETUP_X100
+#         . CLF_PING_X100
+#         . CLF_GET_X100_STATS
+#
+#   1.18  26-Feb-2011 (mark.whalley@ingres.com)
+#
+#         Due to changes in the x100_client security, now include a link to
+#         the passfile.
+#
+#   1.19  05-Jun-2011 (mark.whalley@ingres.com)
+#
+#         New function:
+#
+#         . CLF_GET_X100_CONFIG
+#
+#
+#   1.20  24-Dec-2011 (mark.whalley@ingres.com)
+#
+#         Changed function CLF_GET_X100_STATS to use iivwinfo rather than vwstats
+#
+#   1.21  27-Dec-2011 (mark.whalley@ingres.com)
+#
+#         Merged CLF_GET_X100_STATS and CLF_GET_X100_CONFIG with CLF_GET_VWINFO
+#
+#   1.22  29-Dec-2011 (mark.whalley@ingres.com)
+#
+#         1. Added h_clf_sh_err_log to capture error output from running commands
+#
+#         2. Added further error checking to CLF_GET_VWINFO in an attempt to
+#            determine why it periodically fails to return any results.
+#
+#----------------------------------------------------------------------------
+# Moved all of ISA to EMA and Subversion
+#----------------------------------------------------------------------------
+# SVN_71  29-Mar-2012 (mark.whalley@actian.com)
+#
+#         1. Renamed script from isa to ema
+#
+#         2. Corrected setting of h_clf_iinamu_tail_pid within CLF_OPENIINAMUFEED
+#
+#         3. Added a "sleep 1" after setting the iinamu running in background
+#            within CLF_OPENIINAMUFEED, as very ocassionally it would not be
+#            picked up and the "tail" would end up being owned by the "init"
+#            process (PID=1) and in turn would leave a succession of "tails" and
+#            "iinamus" running.
+#
+# SVN_168 26-Apr-2012 (mark.whalley@actian.com)
+#
+#         1. Switched to bash
+#
+# SVN_185 26-Apr-2012 (mark.whalley@actian.com)
+#
+#         1. Missed the function that also used ksh
+#
+#----------------------------------------------------------------------------
+# Migrated from EMA 1.6 -> 1.7
+#----------------------------------------------------------------------------
+#
+#    version 1.26
+#    26-Oct-2012 (mark.whalley@actian.com)
+#
+#    1. Due to changes in VW from 2.5, II_VWDATA is no longer set so
+#       change to pick up default data location from infodb
+#    
+#    2. Changed VectorWise to Vectorwise
+#
+#    3. From VW 2.5, iivwinfo was changed to vwinfo
+#
+#----------------------------------------------------------------------------
+#
+#----------------------------------------------------------------------------
+# Migrated from EMA 1.7 -> 2.0
+#----------------------------------------------------------------------------
+#
+#    version 1.27
+#    29-Nov-2012 (mark.whalley@actian.com)
+#
+#    1. Renamed script from check_ema_common_library_functions ->
+#       ema_common_library_functions
+#    2. Issued an "export" on h_clf_pid
+#    3. Renamed function IIVWINFO -> VWINFO
+#
+#----------------------------------------------------------------------------
+#
+#    version 1.28
+#    05-Dec-2012 (mark.whalley@actian.com)
+#
+#    1. New function (CLF_CONVERTBYTES)
+#       Taking a single integer representing a number of bytes, return a
+#       string representing the number in bytes, KB, MB, GB
+#
+#----------------------------------------------------------------------------
+#
+#    version 1.29
+#    18-Dec-2012 (mark.whalley@actian.com)
+#
+#    1. New function (CLF_CHECK_AVAILABILITY) - developed by Paul Waddington
+#
+#    2. If Ingres (or VW) installation is down, infodb will complain.  Trap
+#       such errors.
+#
+#    3. New function (CLF_GETVWDATALOCN) as a separate function to CLF_INGPRENV
+#       as the infodb that was being run to get the VW data location was causing
+#       problems if the ingres/vectorwise installation was not running.
+#
+#----------------------------------------------------------------------------
+#
+#    version 1.30
+#    31-Dec-2012 (mark.whalley@actian.com)
+#
+#    1. Changed default DBA of emadb to be ema rather than emadb
+#       NOTE: CLF still relies on ema.cfg - this needs to be changed
+#             for future ema releases
+#
+#----------------------------------------------------------------------------
+#
+#    version 1.31
+#    08-Jan-2013 (mark.whalley@actian.com)
+#
+#    1. Changed CLF_TIDYUP to remove ALL current temporary files
+#       rather than retain LOG files for n days
+#----------------------------------------------------------------------------
+#
+#    version 1.32
+#    05-Feb-2013 (mark.whalley@actian.com)
+#
+#    1. In an attempt to resolve intermittent errors when vwinfo fails to
+#       complete the writing to the output file, append the output to an
+#       empty file rather than creating a new file.
+#
+#    2. and eventually the real problem.  TIDYUP was previously changed
+#       to remove ALL TMP files (not just those that were n days old and had
+#       not been removed "naturally" due to a plugin failure).  This had been
+#       exacerbated by a previous vectorwise bug where vwinfo had been
+#       killing the x100 process leaving LOTS of TMP files lying around.
+#       This would not normally have been a problem, but with hundreds (or
+#       possibly thousands) of these files being created every day, /tmp
+#       often looked rather busy.  The decision was then taken to remove
+#       ALL TMP files.  Unfortunately, with plugins often running in parallel
+#       these TMP files were occasionally being removed that were still being
+#       used.  This change has reverted to removing TMP files that are over 1
+#       day old.  The good news is that with the vectorwise bug having now
+#       been fixed, the likelihood of lots of these files lying around as
+#       now been resolved. (hopefully)
+#
+#----------------------------------------------------------------------------
+#
+#    version 1.33
+#    18-Feb-2013 (paul.waddington@actian.com)
+#
+#    1. Added RDBA flag files to availability checks
+#----------------------------------------------------------------------------
+#
+#    version 1.34
+#    26-Mar-2013 (mark.whalley@actian.com)
+#    
+#    1. Return ^M to sed in MESSAGELOG which had been zapped by a dos2unix
+#
+#----------------------------------------------------------------------------
+#
+#    version 1.35
+#    02-Jul-2013 (mark.whalley@actian.com)
+#    
+#    1. If running on Windows (using Cygwin), we are unable to cat/head/tail
+#       certain files (such as the VW lock file), as they report "device 
+#       or resource busy".
+#
+#       However, it is possible to "read" such files.
+#
+#       This change is for the VW lock file which previous did a head -1
+#       (to get the 1st line).  It now does a single read :-)
+#
+#    2. Again, if running under Windows (Cygwin), it seems that ingprenv
+#       was returning a ^M (\r).  The problem occurs when concatenating
+#       strings in that the Carriage Return would return to the start
+#       of the resultant string and wipe out what had previously been
+#       put in there :-(
+#
+#
+#    03-Jul-2013 (mark.whalley@ingres.com)
+#
+#    1. Cygwin's "ps" needs a "-W" to pick up Windows processes (otherwise
+#       it just picks up processes related to Cygwin.
+#
+#----------------------------------------------------------------------------
+#
+#    version 1.36
+#    02-Sep-2013 (mark.whalley@ingres.com)
+#
+#    1. That TIDYUP issue is never going to go away.  With potentially lots
+#       of find processes being simultaneously triggered, lots of non-plugin 
+#       files and directories in /tmp and problems with find in Windows
+#       (using cygwin), it has been decided to only remove temporary files
+#       that were created for the current invocation of the plugin (using rm
+#       rather than find and rm) and to develop a housekeeping script that
+#       will be periodically run (probably via cron) to tidy up stray/old
+#       temporary files.
+#
+#
+#----------------------------------------------------------------------------
+#
+#    version 1.37
+#    13-Sep-2013 (mark.whalley@ingres.com)
+#
+#    1. TIDYUP bug...  Unlike the previous "find" to remove temporary files
+#       it looks as though an "rm" cannot use a wildcard (*) if it is
+#       enclosed in double quotation marks.
+#
+#    2. The CLF_CHECK_AVAILABILITY function has several places where an
+#       "exit" exists.  Unfortunately, this then means the CLF_TIDYUP
+#       function does not get called, and with the recent removal of the
+#       "Find" to remove old temporary files meant that an accumulation
+#       of these temporary files caused other "find" and "exec rm" (for
+#       example in ema_check_win_ingres, ema_check_vw_log and ema_report_win_ingres
+#       take several minutes to run and thus cause the machine (Windows)
+#       to grind to a halt.
+#
+#
+#----------------------------------------------------------------------------
+#
+#    version 1.38
+#    26-Sep-2013 (mark.whalley@ingres.com)
+#
+#    1. Expanded CLF_CONVERTBYTES to include TB and PB and reduced to 1 DP
+#
+#----------------------------------------------------------------------------
+#
+#    version 1.39
+#    25-Oct-2013 (mark.whalley@ingres.com)
+#
+#    1. Included a space between the value and scale in CLF_CONVERTBYTES
+#
+#----------------------------------------------------------------------------
+#
+#    version 1.40
+#    25-Jan-2014 (paul.waddington@ingres.com)
+#
+#    1. Availability check is run in background to accomodate 'frozen'
+#	installations. This avoids plugin timeouts as script can
+#	gracefully exit.
+#
+#----------------------------------------------------------------------------
+#
+#    version 1.41
+#    29-Jan-2014 (paul.waddington@ingres.com)
+#
+#    1. Availability check: use 'sql' for access check on Windows,
+#	use 'verifydb' for access check on all other platforms.
+#
+#----------------------------------------------------------------------------
+#
+#    version 1.42
+#    02-Apr-2014 (paul.waddington@ingres.com)
+#
+#    1. Tighten up restriction for finding VW data location
+#
+#----------------------------------------------------------------------------
+#
+#    version 1.43
+#    29-Apr-2014 (paul.waddington@ingres.com)
+#
+#    1. Check existance of flag files first in availability check 
+#    2. Check to see if relocatedb -new_database is running. If so, 
+#       halt database specific checks. Relocatedb causes delayed
+#       database connectivity and can cause plugin timeouts
+#
+#----------------------------------------------------------------------------
+#
+#    version 1.44
+#    01-Sep-2014 (paul.waddington@ingres.com)
+#
+#    1. If opt_iidbdb_running.flg is set then block all checks as exclusive
+#       access to iidbdb blocks all other connectivity
+
+#----------------------------------------------------------------------------
+#    version 1.45
+#    22-Sep-2014 (mark.whalley@actian.com)
+#
+#    First draft of functions to support matrix (PADB)
+#
+#    1.  CLF_IS_CONSOLE_RUNNING
+#    2.  CLF_CHKDERBYERR
+#    3.  CLF_CHKMATRIXERR
+#
+#----------------------------------------------------------------------------
+#
+#    version 1.46
+#    05-Oct-2014 (mark.whalley@actian.com)
+#
+#    First draft of functions to support Vector-H (aka Vortex)
+#
+#    1.  Get ii_hdfsdata from infrodb
+#
+#----------------------------------------------------------------------------
+#
+#   Version: 1.47
+#   06-Oct-2014 (paul.waddington@actian.com)
+#
+#       1. Added Copyright
+#
+#----------------------------------------------------------------------------
+#
+#   Version: 1.48
+#   02-Mar-2015 (paul.waddington@actian.com)
+#
+#       1. Added general maintenance flag - opt_running.flg 
+#	2. Changed Vectorwise references to Vector
+#
+#----------------------------------------------------------------------------
+
+
+#----------------------------------------------------------------------------
+h_clf_prog_version=1.48
+#----------------------------------------------------------------------------
+
+
+#----------------------------------------------------------------------------
+# Common Functions
+#----------------------------------------------------------------------------
+#
+# CLF_PROCESS_EMA_CONFIG
+#   If we can find an ema.cfg file (in the nagios "root" ./etc directory),
+#   then read it, setting a number of variables.  if it is not found
+#   (or does not contain certain values), then the variables will take
+#   defaults.
+#
+# CLF_SETUPCOMMONVARIABLES
+#   Setup variables used by most (if not all) DBM scripts
+#
+# CLF_CREATEFILE
+#   Create a file (typically a "temporary" file)
+#
+#   CLF_MESSAGELOG
+#      Handles the displaying and scrolling of messages on the screen and
+#      sending message output to the message log file.
+#
+#   CLF_CHECKCMD
+#      Tests the return status for the last command.
+#
+#   CLF_CONNECTTOANYDATABASE
+#      Attempts to make a connection to a named database.  Typically used to
+#      ensure the installation / database is 'alive' and that the user
+#      running the script is able to access the installation / database.
+#
+#   CLF_CREATELOGFILES
+#      Creates a number of temporary script and output log files and also the
+#      main message log file.
+#
+#   CLF_CHKINGERR
+#      Checks the content of the sql output log for ingres errors, trying to
+#      interpret the error to give a more meaningful name.
+#
+#      (NB that a future modification to this may use a common dbmgmnt
+#      table of ingres error codes / messages)
+#
+#   CLF_TIDYUP
+#      Removes all temporary files (with a PID extension) and also the message
+#      log file after a pre-defined number of days (passed as a paramter).
+#
+#   CLF_GETINGRESVERSION
+#      As it says on the tin, it determines which version of Ingres is
+#      running.
+#
+#   CLF_CHECKFILE
+#      Confirm that the filename passed as a parameter actually exists.
+#
+#   CLF_WHOISDBA
+#      Using the dbmsinfo, determine the DBA of the database passed as a
+#      parameter.
+#
+#   CLF_MUSTBERUNAS
+#      Some scripts must be run by a named user (eg ingres).  This function
+#      determines the current user name and confirms it matches that passed
+#      as a parameter.
+#
+#   CLF_SETUPPATHS
+#      Based on the value of II_SYSTEM, setup various PATHS
+#
+#   CLF_FINDDOW
+#      Using a call to ingres, work out what day of the week it is.
+#
+#   CLF_INGPRENV
+#      Get various ingprenv variables
+#
+#   CLF_MKDIR
+#      Creates a directory
+#
+#   CLF_OPENIINAMUFEED
+#      Opens a pipe to iinamu
+#
+#   CLF_KILLPID
+#      Attempt to kill a process (supplied as a parameter)
+#
+#   CLF_GETIINAMUSERVERS
+#      Get a list of servers known to iinamu and load an array
+#
+#   CLF_TIME_T_TO_INGRES_DATE
+#      Converts a date/time from time_t format to Ingres date format
+#      "dd-mmm-yyyy hh:mm:ss" - eg "11-Aug-2010 14:41:02"
+#
+#   CLF_SETUP_X100
+#      Sets up various IngresVectorwise (IVW) parameters
+#
+#   CLF_PING_X100
+#      If IVW's lock file has at least one port recorded, attempt to
+#      ping the x100 server.
+#
+#   CLF_GET_X100_STATS
+#      Run a query against the X100 server to get some statistics
+#
+#   CLF_GET_X100_CONFIG
+#      Run a query against the X100 server to get the active configuration details
+#
+#   CLF_GET_VWINFO
+#      Run iivwinfo against the X100 server (replaces the preceeding CLF_GET_X100_STATS and CLF_GET_X100_CONFIG
+#
+#----------------------------------------------------------------------------
+
+
+# Copyright 2014 Actian Corporation
+#
+# Program Ownership and Restrictions - This Program (Shell Script) provided hereunder is licensed, not sold, and all intellectual property
+# rights and title to the Program shall remain with Actian and Our suppliers and no interest or ownership therein is conveyed to you.
+# No right to create a copyrightable work, whether joint or unitary, is granted or implied; this includes works that modify (even for purposes of
+# error correction), adapt, or translate the Program or create derivative works, compilations, or collective works therefrom, except as necessary
+# to configure the Program using the options and tools provided for such purposes and contained in the Program. The Program is supplied
+# directly to you for use as defined by the controlling documentation e.g. a Consulting Agreement and for no other reason.  You will treat the
+# Program as confidential information and you will treat it in the same manner as you would to protect your own confidential information,
+# but in no event with less than reasonable care. The Program shall not be disclosed to any third party (except solely to employees, attorneys,
+# and consultants, who need to know and are bound by a written agreement with Actian to maintain the confidentiality of the Program in a manner
+# consistent with this licence or as defined in any other agreement) or used except as permitted under this licence or by agreement between the parties.
+
+
+
+
+#----------------------------------------------------------------------------
+# Function:
+#   CLF_PROCESS_EMA_CONFIG
+#      Read the ema.cfg file (if one exists).  if not, defaults will be 
+#      taken.
+#----------------------------------------------------------------------------
+function CLF_PROCESS_EMA_CONFIG
+{
+
+#----------------------------------------------------------------------------
+#   If the script name does not start "ema_", then set the
+#   temporary directory to $PWD (CLF_PROCESS_EMA_CONFIG).  
+#   This can be used for scripts that are not called as a Nagios 
+#   Plugin to use the current working directory.
+#----------------------------------------------------------------------------
+
+   h_clf_script_name=`basename $h_prog_name`
+
+   h_clf_script_name_char4=`echo $h_clf_script_name | awk '{print (substr ($1, 1, 4))}'`
+
+
+#----------------------------------------------------------------------------
+# Just in case the ema.cfg file cannot be found, opened, or does not
+# contain all the required values, set the defaults here.
+#----------------------------------------------------------------------------
+   if [ $h_clf_script_name_char4 = "ema_" -o $h_clf_script_name_char4 = "check_bddb" ]
+   then
+      h_clf_log_file_dir="/tmp"            # Use /tmp if not set otherwise
+      h_clf_local_data_dir="/tmp"          # Use /tmp if not set otherwise
+   else
+      h_clf_log_file_dir="$PWD"
+      h_clf_local_data_dir="$PWD"
+   fi
+
+   h_clf_ema_server_ip=""               # No default EMA server
+   h_clf_ema_server_user="nagios"       # Only used if IP is set
+   h_clf_ema_server_data_dir="/usr/local/nagios/ema/data/incoming"
+                                        # Only used if IP is set
+   h_clf_ftp_to_ema="N"                 # Should the check scripts ftp their
+                                        # DAT files to the EMA server
+   h_clf_perfdatalog="/usr/local/nagios/logs/ema_perfdata_load.dat"
+                                        # Name and location of perfdata
+   h_clf_emadb="emadb"                  # Name of EMA database
+   h_clf_emadba="ema"                   # Name of DBA of EMA database
+
+
+
+#----------------------------------------------------------------------------
+# The ema.cfg file if it does exist, SHOULD be in the "etc" directory 
+# under the nagios "root" location.  As all the scripts that are fired up
+# for nagios SHOULD be in the "libexec" directory under the nagios "root"
+# location, lets start with this presumption - probably a big mistake, but
+# here goes ;-)
+#----------------------------------------------------------------------------
+   h_clf_nagios_root=/usr/local/nagios/libexec
+   h_clf_nagios_etc=`dirname $h_clf_nagios_root`"/etc"
+   h_clf_ema_cfg=$h_clf_nagios_etc"/ema.cfg"
+
+# MAW: Fix This - TBC 
+#   h_clf_nagios_root=`dirname $0`
+#   h_clf_nagios_etc=`dirname $h_clf_nagios_root`"/etc"
+#   h_clf_ema_cfg=$h_clf_nagios_etc"/ema.cfg"
+
+
+#----------------------------------------------------------------------------
+# OK, if the ema.cfg file does not exist, not much we can do about it :-(
+#
+# Note that at this stage we cannot report any errors to the logfile, as
+# we do not presently know where it is going to be!
+#----------------------------------------------------------------------------
+   if [ ! -f "$h_clf_ema_cfg" ]
+   then
+      return 0
+   fi
+
+#----------------------------------------------------------------------------
+# Is it readable?
+#----------------------------------------------------------------------------
+   if [ ! -r "$h_clf_ema_cfg" ]
+   then
+      return 0
+   fi
+
+#----------------------------------------------------------------------------
+# Does it have anything in it?
+#----------------------------------------------------------------------------
+   if [ ! -s "$h_clf_ema_cfg" ]
+   then
+      return 0
+   fi
+
+#----------------------------------------------------------------------------
+# OK, so the ema.cfg file exists, is readable and not empty, lets have a
+# look inside it...
+#----------------------------------------------------------------------------
+
+#----------------------------------------------------------------------------
+# ... Check for "log file directory".  If found, then check that it 
+#     actually points to a directory that is writable.
+#----------------------------------------------------------------------------
+
+   h_clf_ema_cfg_value=""
+   h_clf_ema_cfg_value=`cat $h_clf_ema_cfg | grep ^LOG_FILE_DIR= | awk -F"=" '{print $2}'`
+
+
+   if [ -n $h_clf_ema_cfg_value ]
+   then
+
+      if [ -d $h_clf_ema_cfg_value -a -w $h_clf_ema_cfg_value ]
+      then
+
+         h_clf_log_file_dir=$h_clf_ema_cfg_value
+
+      fi
+
+   fi
+
+
+#----------------------------------------------------------------------------
+# ... Check for "local data directory".  If found, then check that it 
+#     actually points to a directory that is writable.
+#----------------------------------------------------------------------------
+
+   h_clf_ema_cfg_value=""
+   h_clf_ema_cfg_value=`cat $h_clf_ema_cfg | grep ^LOCAL_DATA_DIR= | awk -F"=" '{print $2}'`
+
+
+   if [ -n $h_clf_ema_cfg_value ]
+   then
+
+      if [ -d $h_clf_ema_cfg_value -a -w $h_clf_ema_cfg_value ]
+      then
+
+         h_clf_local_data_dir=$h_clf_ema_cfg_value
+
+      fi
+
+   fi
+
+#----------------------------------------------------------------------------
+# ... The EMA server, if specified, will be used to SFTP data (DAT) files
+#     over to for subsequent loading into Ingres
+#
+#     ... BUT only IF the h_clf_ftp_to_ema is set to Y
+#
+#     Note that at this stage, NO checking of the authenticity of the values
+#     provided is checked.  This will be done when (if) they are required.
+#
+#     Values expected include:
+#     1. EMA_SERVER_IP
+#     2. EMA_SERVER_USER
+#     3. EMA_SERVER_DATA_DIR
+#     4. FTP_TO_EMA
+#----------------------------------------------------------------------------
+
+
+   h_clf_ema_cfg_value=""
+   h_clf_ema_cfg_value=`cat $h_clf_ema_cfg | grep ^EMA_SERVER_IP= | awk -F"=" '{print $2}'`
+
+   if [ $h_clf_ema_cfg_value != "" ]
+   then
+
+         h_clf_ema_server_ip=$h_clf_ema_cfg_value
+
+   fi
+
+
+   h_clf_ema_cfg_value=""
+   h_clf_ema_cfg_value=`cat $h_clf_ema_cfg | grep ^EMA_SERVER_USER= | awk -F"=" '{print $2}'`
+
+   if [ $h_clf_ema_cfg_value != "" ]
+   then
+
+         h_clf_ema_server_user=$h_clf_ema_cfg_value
+
+   fi
+
+
+   h_clf_ema_cfg_value=""
+   h_clf_ema_cfg_value=`cat $h_clf_ema_cfg | grep ^EMA_SERVER_DATA_DIR= | awk -F"=" '{print $2}'`
+
+   if [ $h_clf_ema_cfg_value != "" ]
+   then
+
+         h_clf_ema_server_data_dir=$h_clf_ema_cfg_value
+
+   fi
+
+
+   h_clf_ema_cfg_value=""
+   h_clf_ema_cfg_value=`cat $h_clf_ema_cfg | grep ^FTP_TO_EMA= | awk -F"=" '{print $2}'`
+
+   if [ $h_clf_ema_cfg_value != "" ]
+   then
+
+         h_clf_ftp_to_ema=$h_clf_ema_cfg_value
+
+   fi
+
+
+#----------------------------------------------------------------------------
+# Pick up the name and location of the perfdata.log file (if it has been
+# provided)
+#----------------------------------------------------------------------------
+   h_clf_ema_cfg_value=""
+   h_clf_ema_cfg_value=`cat $h_clf_ema_cfg | grep ^PERFDATALOG= | awk -F"=" '{print $2}'`
+
+   if [ $h_clf_ema_cfg_value != "" ]
+   then
+
+         h_clf_perfdatalog=$h_clf_ema_cfg_value
+
+   fi
+
+
+
+#----------------------------------------------------------------------------
+# Pick up the name of the EMA database
+#----------------------------------------------------------------------------
+   h_clf_ema_cfg_value=""
+   h_clf_ema_cfg_value=`cat $h_clf_ema_cfg | grep ^EMADB= | awk -F"=" '{print $2}'`
+
+   if [ $h_clf_ema_cfg_value != "" ]
+   then
+
+         h_clf_emadb=$h_clf_ema_cfg_value
+
+   fi
+
+
+#----------------------------------------------------------------------------
+# Pick up the name of the DBA of the EMA database
+#----------------------------------------------------------------------------
+   h_clf_ema_cfg_value=""
+   h_clf_ema_cfg_value=`cat $h_clf_ema_cfg | grep ^EMADBA= | awk -F"=" '{print $2}'`
+
+   if [ $h_clf_ema_cfg_value != "" ]
+   then
+
+         h_clf_emadba=$h_clf_ema_cfg_value
+
+   fi
+
+
+
+#----------------------------------------------------------------------------
+#----------------------------------------------------------------------------
+
+   return 0
+
+#----------------------------------------------------------------------------
+# End of Function: CLF_PROCESS_EMA_CONFIG
+#----------------------------------------------------------------------------
+}
+
+
+
+
+
+#----------------------------------------------------------------------------
+# Function:
+#   CLF_SETUPCOMMONVARIABLES
+#      Setup variables used by most (if not all) DBM scripts
+#----------------------------------------------------------------------------
+function CLF_SETUPCOMMONVARIABLES
+{
+
+# ----------------------------------------------------------------------------
+#       Determine whether running from a terminal (on-line)
+#       tty -s will return a result code of 0 if connected to a terminal,
+#       1 if not.
+#
+#       Note that most scripts will be triggered from Nagios and thus be 
+#       running "in batch" mode.  However some may also be run from the
+#       command line.
+# ----------------------------------------------------------------------------
+   tty -s
+
+   if [ $? = 0 ]
+   then
+           h_clf_online="Y"
+   else
+           h_clf_online="N"
+   fi
+
+
+# ----------------------------------------------------------------------------
+# As there are some differences between Windows and Linux (et al), we need to
+# work out what we are running on
+# ----------------------------------------------------------------------------
+
+   h_clf_os="L"
+
+   h_wc=`uname -a | grep -i cygwin | wc -l`
+
+   if [ $h_wc -eq 1 ]
+   then
+      h_clf_os="W"
+   fi
+
+# ----------------------------------------------------------------------------
+# Pickup the hostname
+# ----------------------------------------------------------------------------
+   h_clf_hostname=`hostname`
+
+# ----------------------------------------------------------------------------
+# PID of current process used amongst other things for naming temporary files
+# ----------------------------------------------------------------------------
+   h_clf_pid=$$
+   export h_clf_pid
+
+
+# ----------------------------------------------------------------------------
+# Call CLF_PROCESS_EMA_CONFIG.  This will process the ema.cfg file
+# (if one is found).  Otherwise various default values will be set.
+# ----------------------------------------------------------------------------
+
+
+   CLF_PROCESS_EMA_CONFIG
+
+
+
+# ----------------------------------------------------------------------------
+# To ensure consistency when writing out data files, set II_DATE_FORMAT to
+# multinational4
+# ----------------------------------------------------------------------------
+   export II_DATE_FORMAT=MULTINATIONAL4
+
+
+#----------------------------------------------------------------------------
+# Nagios exit status
+#----------------------------------------------------------------------------
+#  0 h_clf_nagios_state_ok
+#  1 h_clf_nagios_state_warning
+#  2 h_clf_nagios_state_critical
+#  3 h_clf_nagios_state_unknown
+#  4 h_clf_nagios_state_depwait
+#----------------------------------------------------------------------------
+   h_clf_nagios_state_ok=0
+   h_clf_nagios_state_warning=1
+   h_clf_nagios_state_critical=2
+   h_clf_nagios_state_unknown=3
+   h_clf_nagios_state_depwait=4
+
+   h_clf_nagios_msg_ok="OK"
+   h_clf_nagios_msg_warning="WARNING"
+   h_clf_nagios_msg_critical="CRITCAL"
+   h_clf_nagios_msg_unknown="UNKNOWN"
+   h_clf_nagios_msg_depwait="DEPWAIT"
+
+   return 0
+
+
+#----------------------------------------------------------------------------
+# End of Function: CLF_SETUPCOMMONVARIABLES
+#----------------------------------------------------------------------------
+}
+
+
+
+function CLF_CREATEFILE
+{
+# ----------------------------------------------------------------------------
+#       function CLF_CREATEFILE
+#
+#               Filename (and dir) passed as parameter
+#               If file exists, remove it
+#               Touch the file
+# ----------------------------------------------------------------------------
+   h_clf_create_filename=$1
+
+   if [ -f "$h_clf_create_filename" ]
+   then
+      rm $h_clf_create_filename 2> /dev/null
+
+      CLF_CHECKCMD $? "Y" "attempting to remove $h_clf_create_filename"
+   fi
+
+   touch $h_clf_create_filename
+
+   CLF_CHECKCMD $? "Y" "attempting to touch $h_clf_create_filename"
+
+   chmod 777 $h_clf_create_filename
+
+   CLF_CHECKCMD $? "Y" "attempting to chmod $h_clf_create_filename"
+
+#   chown nagios.nagios $h_clf_create_filename
+#
+#   CLF_CHECKCMD $? "Y" "attempting to chown $h_clf_create_filename"
+
+   return 0
+}
+# -----------------------------------------------------------------------------
+#       End of Function: CLF_CREATEFILE
+# -----------------------------------------------------------------------------
+
+
+function CLF_CHECKCMD
+{
+# ----------------------------------------------------------------------------
+#       function CLF_CHECKCMD
+#               First parameter passed is the return code of the last command
+#               executed.
+#               Second parameter:
+#                  Y: Indicates an error is deemed as critical
+#                  N: Any errors are reported, but not as critical
+#               Remaining parameters give a brief description of what the
+#               command was doing.
+# ----------------------------------------------------------------------------
+   h_clf_return_code=$1
+   shift
+
+   h_clf_critical=$1
+   shift
+
+   h_clf_command=$*
+
+   if [ "$h_clf_return_code" != 0 ]
+   then
+      CLF_MESSAGELOG "++ Failed to run command ++"
+      CLF_MESSAGELOG $h_clf_command
+
+      if [ "$h_clf_critical" = "Y" ]
+      then
+         printf "%s\n" "Failed to run command: $h_clf_command"
+         exit $h_clf_nagios_state_critical
+      fi
+   fi
+
+
+   return 0
+}
+# -----------------------------------------------------------------------------
+#       End of Function: CLF_CHECKCMD
+# -----------------------------------------------------------------------------
+
+
+
+
+function CLF_MESSAGELOG
+{
+
+# ----------------------------------------------------------------------------
+#   Assign whatever has been passed as parameters to the h_clf_message
+#   variable.
+# ----------------------------------------------------------------------------
+   h_clf_message=$*
+
+# ----------------------------------------------------------------------------
+#   As some lines (e.g. o/p from SQL) may contain a ^M, zap them
+# ----------------------------------------------------------------------------
+   h_clf_tmp_message=`echo $h_clf_message | sed -e "s///"`
+   h_clf_message=$h_clf_tmp_message
+
+
+# ----------------------------------------------------------------------------
+#   Whatever 'message' has been passed as a parameter, write it to
+#   the log file 
+# ----------------------------------------------------------------------------
+
+   echo `date +"%d/%m/%Y %H:%M:%S"` "$h_clf_message" >> $h_clf_message_log
+
+   return 0
+}
+# ----------------------------------------------------------------------------
+# End of Function: CLF_MESSAGELOG
+# ----------------------------------------------------------------------------
+
+
+
+#----------------------------------------------------------------------------
+# Function:
+#   CLF_GETINGRESDATETIME - Get the current time from Ingres
+#                   Adding the number of minutes (passed as a parameter)
+#----------------------------------------------------------------------------
+function CLF_GETINGRESDATETIME
+{
+
+#----------------------------------------------------------------------------
+# If no parameter is passed, presume nothing to be added to the current
+# time
+#----------------------------------------------------------------------------
+   if [ -z "$1" ]
+   then
+      h_clf_add_minutes=0
+   else
+      h_clf_add_minutes=$1
+   fi
+
+
+   echo "select date('now') + '$h_clf_add_minutes minutes' as date_time \p\g" > $h_clf_sql_script
+
+   h_clf_date_time=`sql iidbdb < $h_clf_sql_script | grep -v date_time | grep ^\| | sed -e "s/|//g"`
+
+   if [ ! "$h_clf_date_time" ]
+   then
+      printf "%s\n" "CRITICAL - unable to determine the date and time"
+
+      exit $h_clf_nagios_state_critical
+   fi
+
+#----------------------------------------------------------------------------
+# OK, all done
+#----------------------------------------------------------------------------
+   return 0
+
+#----------------------------------------------------------------------------
+# End of Function: CLF_GETINGRESDATETIME
+#----------------------------------------------------------------------------
+}
+
+
+function CLF_CURDATETIME
+{
+
+# ----------------------------------------------------------------------------
+#   Get the current system date / time
+# ----------------------------------------------------------------------------
+   h_clf_cur_date=`date +"%d/%m/%Y"`
+   h_clf_cur_time=`date +"%H:%M:%S"`
+   h_clf_cur_yyyy=`date +"%Y"`
+
+   h_clf_cur_moy=`date +"%m"`
+   h_clf_cur_dom=`date +"%d"`
+   h_clf_cur_yy=`date +"%y"`
+   h_clf_cur_abbrev_month=`date +"%b"`
+   h_clf_cur_full_month=`date +"%B"`
+   h_clf_cur_abbrev_dow=`date +"%a"`
+   h_clf_cur_full_dow=`date +"%A"`
+
+   h_clf_cur_yyyymmddhhmmss=`date +"%Y%m%d%H%M%S"`
+
+   h_clf_cur_datetime=`date +"%d/%m/%Y %H:%M:%S"`
+
+   return 0
+
+}
+# ----------------------------------------------------------------------------
+# End of Function: CLF_CURDATETIME
+# ----------------------------------------------------------------------------
+
+
+
+
+function CLF_CREATELOGFILES
+{
+# ------------------------------------------------------------------------------
+#   h_clf_log_file_dir: Location of temporary (TMP), log (LOG) and data (DAT)
+#   files.
+#
+#   If this does not exist, try and create it.
+# ------------------------------------------------------------------------------
+
+   if [ ! -d "$h_clf_log_file_dir" ]
+   then
+
+      mkdir -p $h_clf_log_file_dir
+
+# ------------------------------------------------------------------------------
+# If we are unable to create the temporary directory, no point in trying to call 
+# CLF_MESSAGELOG as unable to write to it.
+# ------------------------------------------------------------------------------
+      if [ $? -ne 0 ]
+      then
+         printf "%s\n" "Unable to create temporary directory: $h_clf_log_file_dir"
+         exit $h_clf_nagios_state_critical
+      fi
+
+   fi
+
+# ------------------------------------------------------------------------------
+# h_clf_message_log
+#    Used to keep a log of messages for this script.
+#
+#    If it already exists (should really as PID is included in name), append
+#    to it.
+#
+#    Otherwise, try to create it.
+# ------------------------------------------------------------------------------
+   h_clf_message_log=$h_clf_log_file_dir/$h_prog_name.LOG.$h_clf_pid
+
+   if [ -f $h_clf_message_log ]
+   then
+      printf "%s\n" "" >> $h_clf_message_log
+      printf "%s\n" "------------------------------------------------" >> $h_clf_message_log
+      printf "%s\n" "" >> $h_clf_message_log
+   else
+      CLF_CREATEFILE $h_clf_message_log
+   fi
+
+
+# ------------------------------------------------------------------------------
+# h_clf_sql_script
+#   Used to hold an SQL script as it is built up ready to run against a 
+#   database
+# ------------------------------------------------------------------------------
+   h_clf_sql_script=$h_clf_log_file_dir/$h_prog_name.sql_script.TMP.$h_clf_pid
+   CLF_CREATEFILE $h_clf_sql_script
+
+# ------------------------------------------------------------------------------
+# h_clf_sql_log
+#    Used to hold the standard output from running an SQL script against a
+#    database.  Note that the SQL script may itself "copy" data into additional
+#    files.  These files will be defined within the main program, as these are
+#    typically unique to that program.
+#
+#    Although used for other purposes, the primary use of the h_clf_sql_log
+#    file to to check for SQL errors being returned.
+# ------------------------------------------------------------------------------
+   h_clf_sql_log=$h_clf_log_file_dir/$h_prog_name.sql_log.TMP.$h_clf_pid
+   CLF_CREATEFILE $h_clf_sql_log
+
+# ------------------------------------------------------------------------------
+# h_clf_sql_log_history
+#    Each h_clf_sql_log is appended to a h_clf_sql_log_history for this
+#    running of the main application.  This is useful when debugging as
+#    a complete history of the SQL that has been run can be examined.
+# ------------------------------------------------------------------------------
+   h_clf_sql_log_history=$h_clf_log_file_dir/$h_prog_name.sql_log_history.TMP.$h_clf_pid
+   CLF_CREATEFILE $h_clf_sql_log_history
+
+
+# ------------------------------------------------------------------------------
+# h_clf_sh_script
+#    Temporary file to hold shell commands for running independently of
+#    mainscript.
+# ------------------------------------------------------------------------------
+   h_clf_sh_script=$h_clf_log_file_dir/$h_prog_name.sh_clf_script.TMP.$h_clf_pid
+   CLF_CREATEFILE $h_clf_sh_script
+
+   chmod 777 $h_clf_sh_script
+
+
+# ------------------------------------------------------------------------------
+# h_clf_sh_log
+#    Although most shell/operating system commands will be initiated and
+#    their results / return status examined within the main program, the
+#    h_clf_sh_log is used when the results need to be held within a file
+#    for further processing.
+# ------------------------------------------------------------------------------
+   h_clf_sh_log=$h_clf_log_file_dir/$h_prog_name.sh_clf_log.TMP.$h_clf_pid
+   CLF_CREATEFILE $h_clf_sh_log
+
+
+# ------------------------------------------------------------------------------
+# h_clf_sh_err_log
+#    To assist with debugging, this file will capture error output from 
+#    running commands.
+# ------------------------------------------------------------------------------
+   h_clf_sh_err_log=$h_clf_log_file_dir/$h_prog_name.sh_clf_err_log.TMP.$h_clf_pid
+   CLF_CREATEFILE $h_clf_sh_err_log
+
+
+   return 0
+}
+# -----------------------------------------------------------------------------
+#       End of Function: CLF_CREATELOGFILES
+# -----------------------------------------------------------------------------
+
+
+
+function CLF_CHKINGERR
+{
+# ------------------------------------------------------------------------------
+#   Check the output generated by running an SQL statement for erros
+#   First parameter:
+#      Y: Indicates an error is deemed as critical
+#      N: Any errors are reported, but not as critical
+# ----------------------------------------------------------------------------
+   h_clf_critical=$1
+   shift
+
+# ------------------------------------------------------------------------------
+   h_clf_deadlock="N"
+
+# ------------------------------------------------------------------------------
+# Before checking for errors, append the SQL log file to the history of
+# SQL logs...
+# ------------------------------------------------------------------------------
+   cat $h_clf_sql_log >> $h_clf_sql_log_history
+
+# ------------------------------------------------------------------------------
+# If deadlock is "allowed", just check for it and if found, return the the
+# calling module (where a decision as to what to do would have to be made!)
+# ------------------------------------------------------------------------------
+   if [ "$h_clf_deadlock_allowed" = "Y" ]
+   then
+      h_clf_ing_err=`grep E_US125C $h_clf_sql_log | wc -l`
+
+      if [ "$h_clf_ing_err" -gt 0 ]
+      then
+         h_clf_deadlock="Y"
+         return
+      fi
+   fi
+
+
+# ------------------------------------------------------------------------------
+#   Check for some pre-defined Ingres errors to make diagnosis easier
+#
+#   US16BE - Table is protected
+#   US13F9 - Invalid location
+#
+# ------------------------------------------------------------------------------
+
+   h_clf_ingres_error_found="N"
+
+# ------------------------------------------------------------------------------
+
+   US16BE=0
+
+   US16BE=`grep E_US16BE $h_clf_sql_log | wc -l`
+
+   if [ "$US16BE" -gt 0 ]
+   then
+      CLF_MESSAGELOG Job Failure - Tables are protected - no grants
+      h_clf_ingres_error_found="Y"
+   fi
+
+# ------------------------------------------------------------------------------
+
+   US13F9=0
+
+   US13F9=`grep E_US13F9 $h_clf_sql_log | wc -l`
+
+   if [ "$US13F9" -gt 0 ]
+   then
+      CLF_MESSAGELOG Job Failure - Invalid location name
+      h_clf_ingres_error_found="Y"
+   fi
+
+# ------------------------------------------------------------------------------
+
+   US07DA=0
+
+   US07DA=`grep E_US07DA $h_clf_sql_log | wc -l`
+
+   if [ "$US07DA" -gt 0 ]
+   then
+      CLF_MESSAGELOG Job Failure - Duplicate object name
+      h_clf_ingres_error_found="Y"
+   fi
+
+# ------------------------------------------------------------------------------
+
+   US0845=0
+
+   US0845=`grep E_US0845 $h_clf_sql_log | wc -l`
+
+   if [ "$US0845" -gt 0 ]
+   then
+      CLF_MESSAGELOG Job Failure - Table does not exist
+      h_clf_ingres_error_found="Y"
+   fi
+
+# ------------------------------------------------------------------------------
+
+   US16A9=0
+
+   US16A9=`grep E_US16A9 $h_clf_sql_log | wc -l`
+
+   if [ "$US16A9" -gt 0 ]
+   then
+      CLF_MESSAGELOG Job Failure - Column does not exist
+      h_clf_ingres_error_found="Y"
+   fi
+
+
+# ------------------------------------------------------------------------------
+#   Check for all other errors
+# ------------------------------------------------------------------------------
+
+   h_clf_ing_err=`grep E_[A-Z][A-Z][0-9] $h_clf_sql_log | wc -l`
+
+   if [ "$h_clf_ing_err" -gt 0 -o "$h_clf_ingres_error_found" = "Y" ]
+   then
+      CLF_MESSAGELOG Job Failure - Check SQL log:
+      CLF_MESSAGELOG Job Failure - $h_clf_sql_log
+
+      if [ "$h_clf_critical" = "Y" ]
+      then
+         printf "%s\n" "Failed to run SQL: $h_clf_sql_log"
+         exit $h_clf_nagios_state_critical
+      fi
+   fi
+
+
+   return 0
+}
+# -----------------------------------------------------------------------------
+#       End of Function: CLF_CHKINGERR
+# -----------------------------------------------------------------------------
+
+
+
+function CLF_CHKDERBYERR
+{
+# ------------------------------------------------------------------------------
+#   Check the output generated by running an SQL statement for erros
+#   First parameter:
+#      Y: Indicates an error is deemed as critical
+#      N: Any errors are reported, but not as critical
+#
+#   NB This is an initial prototype
+# ----------------------------------------------------------------------------
+   h_clf_critical=$1
+   shift
+
+# ------------------------------------------------------------------------------
+# Before checking for errors, append the SQL log file to the history of
+# SQL logs...
+# ------------------------------------------------------------------------------
+   cat $h_clf_sql_log >> $h_clf_sql_log_history
+
+# ------------------------------------------------------------------------------
+
+   h_clf_derby_error_found="N"
+
+# ------------------------------------------------------------------------------
+
+   h_clf_derby_err=`grep ERROR $h_clf_sql_log | wc -l`
+
+   if [ "$h_clf_derby_err" -gt 0 ]
+   then
+      CLF_MESSAGELOG Job Failure - Check SQL log:
+      CLF_MESSAGELOG Job Failure - $h_clf_sql_log
+
+      if [ "$h_clf_critical" = "Y" ]
+      then
+         printf "%s\n" "Failed to run DERBY SQL: $h_clf_sql_log"
+         exit $h_clf_nagios_state_critical
+      fi
+   fi
+
+   return 0
+}
+# -----------------------------------------------------------------------------
+#       End of Function: CLF_CHKDERBYERR
+# -----------------------------------------------------------------------------
+
+function CLF_CHKMATRIXERR
+{
+# ------------------------------------------------------------------------------
+#   Check the output generated by running an SQL statement for erros
+#   First parameter:
+#      Y: Indicates an error is deemed as critical
+#      N: Any errors are reported, but not as critical
+#
+#   NB This is an initial prototype
+# ----------------------------------------------------------------------------
+   h_clf_critical=$1
+   shift
+
+# ------------------------------------------------------------------------------
+# Before checking for errors, append the SQL log file to the history of
+# SQL logs...
+# ------------------------------------------------------------------------------
+   cat $h_clf_sql_log >> $h_clf_sql_log_history
+
+# ------------------------------------------------------------------------------
+
+   h_clf_matrix_error_found="N"
+
+# ------------------------------------------------------------------------------
+
+   h_clf_matrix_err=`grep ERROR $h_clf_sql_log | wc -l`
+
+   if [ "$h_clf_matrix_err" -gt 0 ]
+   then
+      CLF_MESSAGELOG Job Failure - Check SQL log:
+      CLF_MESSAGELOG Job Failure - $h_clf_sql_log
+
+      if [ "$h_clf_critical" = "Y" ]
+      then
+         printf "%s\n" "Failed to run MATRIX SQL: $h_clf_sql_log"
+         exit $h_clf_nagios_state_critical
+      fi
+   fi
+
+   return 0
+}
+# -----------------------------------------------------------------------------
+#       End of Function: CLF_CHKMATRIXERR
+# -----------------------------------------------------------------------------
+
+
+
+function CLF_TIDYUP
+{
+# ------------------------------------------------------------------------------
+# Function: CLF_TIDYUP
+#    Removes all temporary files that were created by this program with a 
+#    .TMP. PID extension.
+#
+#    Removes all log files that were created by this program with a 
+#    .LOG. extension. after a pre-defined number of days (passed as
+#    a parameter.
+#
+#    Removes all temporary files that were created by this program with a 
+#    .TMP. PID extension that have been sitting around for a pre-defined
+#    number of days (typically left around due to a previous failed run).
+#
+#    Any ".DAT" (data files) will be retained (and overwritten) by subsequent
+#    runs of the same check script.
+#
+# ------------------------------------------------------------------------------
+
+# ------------------------------------------------------------------------------
+# Just in case this function is called WITHOUT some of the required variables
+# having been set (such as the filename stem, PID etc), then do not continue
+# to run this functions as doing so could remove files that should not be!!!!
+# ------------------------------------------------------------------------------
+#  if [ -z "$h_prog_name" -o -z "$h_clf_pid" -o -z "$h_clf_nagios_state_warning" ]
+
+   if [ -z "$h_prog_name" -o -z "$h_clf_pid" ]
+   then
+      return 0
+   fi
+
+
+# ------------------------------------------------------------------------------
+# Non "temporary" files (e.g. log files) can be retained for a number of days
+# as defined by the supplied parameter.
+# ------------------------------------------------------------------------------
+   if [ $# != 1 ]
+   then
+      printf "%s" "Usage: $0 [No of days to keep log files]"
+      exit $h_clf_nagios_state_warning
+   fi
+
+   h_clf_no_of_days=$1
+
+
+
+#echo $h_clf_log_file_dir
+#echo $h_prog_name
+#echo $h_clf_pid
+#echo $h_clf_no_of_days
+
+# ------------------------------------------------------------------------------
+# Find and remove all TMP and LOG files created from this run...
+# ------------------------------------------------------------------------------
+   rm $h_clf_log_file_dir/$h_prog_name*.TMP.$h_clf_pid 2>/dev/null
+   rm $h_clf_log_file_dir/$h_prog_name*.LOG.$h_clf_pid 2>/dev/null
+
+# ------------------------------------------------------------------------------
+# Remove all temporary files associated with availability check (CLF_CHECK_AVAILABILITY)
+# ------------------------------------------------------------------------------
+   rm -f ${OUTFILE} 2>/dev/null
+   rm -f ${COMPFLAG} 2>/dev/null
+
+# ------------------------------------------------------------------------------
+# This is what TIDYUP used to do ....
+# ------------------------------------------------------------------------------
+#  find $h_clf_log_file_dir -type f -name "$h_prog_name*.TMP.$h_clf_pid" -exec \rm {} \; 2>/dev/null
+# ------------------------------------------------------------------------------
+# Find and remove all LOG files over the time period...
+# NOTE: Changed to remove all LOG files
+# ------------------------------------------------------------------------------
+#  find $h_clf_log_file_dir -type f -mtime +$h_clf_no_of_days -name "$h_prog_name*.LOG.*" -exec \rm {} \; 2>/dev/null
+#  find $h_clf_log_file_dir -type f -name "$h_prog_name*.LOG.$h_clf_pid" -exec \rm {} \; 2>/dev/null
+# ------------------------------------------------------------------------------
+# Find and remove all TMP files (Note: time over time period has now been removed)
+# ------------------------------------------------------------------------------
+#  find $h_clf_log_file_dir -type f -mtime +$h_clf_no_of_days -name "$h_prog_name*.TMP.*" -exec \rm {} \; 2>/dev/null
+#  find $h_clf_log_file_dir -type f -name "$h_prog_name*.TMP.*" -exec \rm {} \; 2>/dev/null
+
+
+
+   return 0
+}
+# -----------------------------------------------------------------------------
+#       End of Function: CLF_TIDYUP
+# -----------------------------------------------------------------------------
+
+
+
+function CLF_SETUPPATHS
+{
+# ------------------------------------------------------------------------------
+#       Using the supplied II_SYSTEM parameter, set up the Ingres PATHS
+# ------------------------------------------------------------------------------
+
+   export II_SYSTEM=$1
+
+# ------------------------------------------------------------------------------
+# Do some basic sanity checking on the value supplied for II_SYSTEM...
+# ------------------------------------------------------------------------------
+
+# ------------------------------------------------------------------------------
+# ... like is it a directory?
+# ------------------------------------------------------------------------------
+
+   if [ ! -d "$II_SYSTEM" ]
+   then
+      printf "%s\n" "$II_SYSTEM is not a directory"
+      exit $h_clf_nagios_state_critical
+   fi
+
+
+# ------------------------------------------------------------------------------
+# ... does it contain something that looks as though it might
+#     contain an Ingres installation?
+# ------------------------------------------------------------------------------
+
+   if [ ! -f "$II_SYSTEM/ingres/files/config.dat" ]
+   then
+      printf "%s\n" "$II_SYSTEM does not seem to contain an Ingres installation"
+      exit $h_clf_nagios_state_critical
+   fi
+
+
+# ------------------------------------------------------------------------------
+# OK, looks prety good, setup some PATHs
+# ------------------------------------------------------------------------------
+   export PATH=$II_SYSTEM/ingres/bin:$II_SYSTEM/ingres/utility:$PATH
+
+   if [ "$LD_LIBRARY_PATH" ] ; then
+       LD_LIBRARY_PATH=/usr/local/lib:$II_SYSTEM/ingres/lib:$II_SYSTEM/ingres/lib/lp32:$LD_LIBRARY_PATH
+   else
+       LD_LIBRARY_PATH=/lib:/usr/lib:/usr/local/lib:$II_SYSTEM/ingres/lib:$II_SYSTEM/ingres/lib/lp32
+   fi
+   export LD_LIBRARY_PATH
+
+
+   return 0
+}
+# -----------------------------------------------------------------------------
+#       End of Function: CLF_SETUPPATHS
+# -----------------------------------------------------------------------------
+
+
+function CLF_GETINGPRENV
+{
+# ----------------------------------------------------------------------------
+#  Issue a calls to ingprenv to determine ingres installation settings
+# ----------------------------------------------------------------------------
+
+
+   h_clf_ingprenv_ii_database=`ingprenv II_DATABASE | tr -d $'\r'`
+   CLF_CHECKCMD $? "Y" "Getting ingprenv II_DATABASE"
+
+   h_clf_ingprenv_ii_checkpoint=`ingprenv II_CHECKPOINT | tr -d $'\r'`
+   CLF_CHECKCMD $? "Y" "Getting ingprenv II_CHECKPOINT"
+
+   h_clf_ingprenv_ii_journal=`ingprenv II_JOURNAL | tr -d $'\r'`
+   CLF_CHECKCMD $? "Y" "Getting ingprenv II_JOURNAL"
+
+   h_clf_ingprenv_ii_dump=`ingprenv II_DUMP | tr -d $'\r'`
+   CLF_CHECKCMD $? "Y" "Getting ingprenv II_DUMP"
+
+   h_clf_ingprenv_ii_work=`ingprenv II_WORK | tr -d $'\r'`
+   CLF_CHECKCMD $? "Y" "Getting ingprenv II_WORK"
+
+   h_clf_ingprenv_ii_installation=`ingprenv II_INSTALLATION | tr -d $'\r'`
+   CLF_CHECKCMD $? "Y" "Getting ingprenv II_INSTALLATION"
+   return 0
+}
+# -----------------------------------------------------------------------------
+#       End of Function: CLF_GETINGPRENV
+# -----------------------------------------------------------------------------
+
+
+
+
+function CLF_GETVWDATALOCN
+{
+
+# -----------------------------------------------------------------------------
+# Prior to VW 2.5, the ingprenv variable II_VWDATA pointed to
+# the single data location (and the infamous "0" file)
+# -----------------------------------------------------------------------------
+   h_clf_ingprenv_ii_vwdata=`ingprenv II_VWDATA`
+   CLF_CHECKCMD $? "Y" "Getting ingprenv II_VWDATA"
+
+# -----------------------------------------------------------------------------
+# If installation is down, infodb will complain.  If so, trap the errors
+# -----------------------------------------------------------------------------
+   infodb ${h_clv_database_name} 1>/dev/null 2>&1
+   h_clf_infodb_status=$?
+
+# -----------------------------------------------------------------------------
+# ... post VW2.5, the VW root data location can be found from 
+#     infodb.
+# -----------------------------------------------------------------------------
+   if [ ${h_clf_infodb_status} = 0 ]
+   then
+      if [ -z "$h_clf_ingprenv_ii_vwdata" ]
+      then
+         h_clf_ii_vwdata="N"
+
+#        h_clf_ingprenv_ii_vwdata=`infodb $h_clv_database_name | grep ii_database | tail -1 | awk '{print $3}'`
+
+#        h_infodb_ii_database_name_line=`infodb $h_clv_database_name | grep ii_database | tail -1`
+         h_infodb_ii_database_name_line=`infodb $h_clv_database_name | grep ROOT,DATA,VWROOT | grep "/data/" | tail -1`
+         set -- $h_infodb_ii_database_name_line
+         shift; shift
+         h_clf_ingprenv_ii_vwdata=$*
+
+         h_clf_vw_default_data_locn="$h_clf_ingprenv_ii_vwdata"
+
+      else
+         h_clf_ii_vwdata="Y"
+         h_clf_vw_default_data_locn=$h_clf_ingprenv_ii_vwdata/ingres/data/vectorwise/$h_clv_database_name
+      fi
+
+   else
+      h_clf_ii_vwdata="N"
+      h_clf_ingprenv_ii_vwdata=""
+      h_clf_vw_default_data_locn=""
+   fi
+
+
+   return 0
+}
+# -----------------------------------------------------------------------------
+#       End of Function: CLF_GETVWDATALOCN
+# -----------------------------------------------------------------------------
+
+
+function CLF_GETHDFSDATA
+{
+
+# -----------------------------------------------------------------------------
+# Get the ii_hdfsdata location from intodb
+# -----------------------------------------------------------------------------
+
+   h_clf_infodb_ii_hdfsdata=`infodb $h_clv_database_name | grep ii_hdfsdata | tail -1 | awk -F" " '{print $3}'`
+
+
+   return 0
+}
+# -----------------------------------------------------------------------------
+#       End of Function: CLF_GETVWDATALOCN
+# -----------------------------------------------------------------------------
+
+
+
+
+
+
+
+function CLF_SFTPSINGLEFILE
+{
+# ----------------------------------------------------------------------------
+#  Using the parameters passed, sftp a single file to a remote server.
+#
+#  Input:
+#     -s:   Destination server name (or IP address)
+#     -u:   User id
+#     -l:   Local filename including directory
+#     -d:   Destination filename including directory
+#
+# ----------------------------------------------------------------------------
+
+
+   CLF_MESSAGELOG
+   CLF_MESSAGELOG Preparing to FTP a single file 
+
+   h_clf_fsf_dest_server=""
+   h_clf_fsf_user_id=""
+   h_clf_fsf_local_full_file_name=""
+   h_clf_fsf_destination_full_file_name=""
+
+   OPTIND=1
+
+   while getopts s:u:l:d: h_clf_opt
+   do
+
+      case "$h_clf_opt" in
+      "s")   h_clf_fsf_dest_server=$OPTARG;;
+      "u")   h_clf_fsf_user_id=$OPTARG;;
+      "l")   h_clf_fsf_local_full_file_name=$OPTARG;;
+      "d")   h_clf_fsf_destination_full_file_name=$OPTARG;;
+
+      *)     CLF_MESSAGELOG
+             CLF_MESSAGELOG Job Failure - Unrecognised option $h_clf_opt
+             return 1;;
+      esac
+   done
+
+
+# -----------------------------------------------------------------------------
+# Validate command line parameters
+# -----------------------------------------------------------------------------
+
+# -----------------------------------------------------------------------------
+# Check that the destination server has been supplied and that a "ping" to
+# it comes back with a reply.
+# -----------------------------------------------------------------------------
+   if [ "$h_clf_fsf_dest_server" = "" ]
+   then
+      CLF_MESSAGELOG
+      CLF_MESSAGELOG Job Failure - Destination server has not been supplied.
+      return 1
+   fi
+
+#   ping $h_clf_fsf_dest_server 1> /dev/null 2> /dev/null
+#   if [ $? -ne 0 ]
+#   then
+#      CLF_MESSAGELOG
+#      CLF_MESSAGELOG Job Failure - Destination server $h_clf_fsf_dest_server
+#      CLF_MESSAGELOG Job Failure - did not respond to a ping.
+#      return 1
+#   fi
+
+
+# -----------------------------------------------------------------------------
+# Check that the user id has been supplied.
+# At this stage, it is not required to validate their authenticity
+# -----------------------------------------------------------------------------
+   if [ "$h_clf_fsf_user_id" = "" ]
+   then
+      CLF_MESSAGELOG
+      CLF_MESSAGELOG Job Failure - User Id has not been supplied
+      return 1
+   fi
+
+
+# -----------------------------------------------------------------------------
+# Check that the local full file name has been supplied and actually exists
+# -----------------------------------------------------------------------------
+   if [ "$h_clf_fsf_local_full_file_name" = "" ]
+   then
+      CLF_MESSAGELOG
+      CLF_MESSAGELOG Job Failure - Local file name has not been supplied
+      return 1
+   fi
+
+   if [ ! -f "$h_clf_fsf_local_full_file_name" ]
+   then
+      CLF_MESSAGELOG
+      CLF_MESSAGELOG Job Failure - Local file name does not exist
+      return 1
+   fi
+
+
+# -----------------------------------------------------------------------------
+# Check that the destination file name has been supplied
+# -----------------------------------------------------------------------------
+   if [ "$h_clf_fsf_destination_full_file_name" = "" ]
+   then
+      CLF_MESSAGELOG
+      CLF_MESSAGELOG Job Failure - Destination file name has not been supplied
+      return 1
+   fi
+
+
+
+   h_clf_fsf_local_dir=`dirname $h_clf_fsf_local_full_file_name`
+   h_clf_fsf_local_file_name=`basename $h_clf_fsf_local_full_file_name`
+
+   h_clf_fsf_destination_dir=`dirname $h_clf_fsf_destination_full_file_name`
+   h_clf_fsf_destination_file_name=`basename $h_clf_fsf_destination_full_file_name`
+
+
+   CLF_MESSAGELOG 
+   CLF_MESSAGELOG SFTP $h_clf_fsf_local_file_name to $h_clf_fsf_dest_server
+
+
+
+   h_ftp_batch="$h_clf_log_file_dir/$h_prog_name.ftp_batch.TMP.$h_clf_pid"
+   CLF_CREATEFILE $h_ftp_batch
+
+   printf "%s\n" "lcd $h_clf_fsf_local_dir"                                         > $h_ftp_batch
+   printf "%s\n" "cd $h_clf_fsf_destination_dir"                                   >> $h_ftp_batch
+   printf "%s\n" "put $h_clf_fsf_local_file_name $h_clf_fsf_destination_file_name" >> $h_ftp_batch
+   printf "%s\n" "quit"                                                            >> $h_ftp_batch
+
+
+sftp -oIdentityFile=$h_clf_nagios_etc/keys/ema_server -b$h_ftp_batch $h_clf_fsf_user_id@$h_clf_fsf_dest_server 1> /dev/null 2>&1
+#sftp -oIdentityFile=$h_clf_nagios_etc/keys/ema_server -b$h_ftp_batch $h_clf_fsf_user_id@$h_clf_fsf_dest_server 
+
+   CLF_CHECKCMD $? "Y" "Attempting to sftp $h_clf_fsf_local_file_name to $h_clf_fsf_dest_server"
+
+   rm $h_ftp_batch
+
+   CLF_MESSAGELOG DONE
+
+   return 0
+}
+# -----------------------------------------------------------------------------
+#       End of Function: CLF_SFTPSINGLEFILE
+# -----------------------------------------------------------------------------
+
+
+
+# ----------------------------------------------------------------------------
+#       function CLF_OPENIINAMUFEED
+# ----------------------------------------------------------------------------
+function CLF_OPENIINAMUFEED
+{
+
+   CLF_MESSAGELOG "Opening background feed to IINAMU"
+
+# ----------------------------------------------------------------------------
+# Create a file into which commands can be pipped into iinamu
+# ----------------------------------------------------------------------------
+   h_clf_iinamu_feed=$h_clf_log_file_dir/$h_prog_name.iinamu_feed.TMP.$h_clf_pid
+   CLF_CREATEFILE $h_clf_iinamu_feed
+
+# ----------------------------------------------------------------------------
+# Create a file which receive output from iinamu
+# ----------------------------------------------------------------------------
+   h_clf_iinamu_log=$h_clf_log_file_dir/$h_prog_name.iinamu_log.TMP.$h_clf_pid
+   CLF_CREATEFILE $h_clf_iinamu_log
+
+# ----------------------------------------------------------------------------
+# Open a pipe to iinamu
+# ----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------
+# Ummm.
+#   After reverting to ksh, there seemed to be problem when background jobs
+#   are killed in that they insisted writing output which on SuSE 
+#   would not be trapped by 1> or 2>
+# ----------------------------------------------------------------------------
+
+#   tail -f $h_clf_iinamu_feed | iinamu >> $h_clf_iinamu_log& 
+#   CLF_CHECKCMD $? "Y" "tailing $h_clf_iinamu_feed into iinamu"
+
+   printf "%s\n" "#!/bin/bash"                                                 > $h_clf_sh_script
+   printf "%s\n" "tail -f $h_clf_iinamu_feed | iinamu >> $h_clf_iinamu_log& " >> $h_clf_sh_script
+   printf "%s\n" "sleep 1"                                                    >> $h_clf_sh_script
+#   printf "%s\n" "return"                                                     >> $h_clf_sh_script
+
+
+# ----------------------------------------------------------------------------
+# Run the file containing the shell script
+# ----------------------------------------------------------------------------
+   $h_clf_sh_script
+#   h_clf_iinamu_tail_pid=$?
+
+#   CLF_CHECKCMD $? "Y" "tailing $h_clf_iinamu_feed into iinamu"
+
+
+# ----------------------------------------------------------------------------
+# Capture the tail PID
+# ----------------------------------------------------------------------------
+#   h_clf_iinamu_tail_pid=$!
+
+# ----------------------------------------------------------------------------
+# ... and the PID of the iinamu feed
+# ----------------------------------------------------------------------------
+   h_clf_iinamu_feed_pid=`ps -fu ingres | \
+           grep "tail -f $h_clf_iinamu_feed" | \
+           grep -v grep | \
+           awk '{print $2}'`
+
+   h_clf_iinamu_tail_pid=`ps -fu ingres | \
+           grep "tail -f $h_clf_iinamu_feed" | \
+           grep -v grep | \
+           awk '{print $3}'`
+
+   CLF_MESSAGELOG "IINAMU process...........: $h_clf_iinamu_feed_pid"
+   CLF_MESSAGELOG "IINAMU backgnd tail PID..: $h_clf_iinamu_tail_pid"
+
+
+   return 0
+
+}
+# -----------------------------------------------------------------------------
+#       End of Function: CLF_OPENIINAMUFEED
+# -----------------------------------------------------------------------------
+
+
+
+# ----------------------------------------------------------------------------
+#       function CLF_KILLPID
+# ----------------------------------------------------------------------------
+function CLF_KILLPID
+{
+        h_clf_kill_pid=$1
+
+        if [ "$h_clf_kill_pid" = "" ]
+        then
+                CLF_MESSAGELOG "No PID to kill has been declared"
+                return 1
+        fi
+
+        CLF_MESSAGELOG "Checking PID $h_clf_kill_pid"
+
+
+# ----------------------------------------------------------------------------
+#       Is the PID actually running?
+# ----------------------------------------------------------------------------
+        ps -p $h_clf_kill_pid > /dev/null 2>&1
+        if [ $? -ne 0 ]
+        then
+                CLF_MESSAGELOG "$h_clf_kill_pid does not exist"
+                return 1
+        fi
+
+
+# ----------------------------------------------------------------------------
+#       Attempt to kill the PID
+# ----------------------------------------------------------------------------
+
+        CLF_MESSAGELOG "Attempting to kill $h_clf_kill_pid"
+
+        kill -9 $h_clf_kill_pid >/dev/null 2>&1
+
+        CLF_CHECKCMD $? "Y" "killing PID $h_clf_kill_pid"
+
+        CLF_MESSAGELOG "Killed the following PID.: $h_clf_kill_pid"
+
+
+   return 0
+
+}
+# -----------------------------------------------------------------------------
+#       End of Function: CLF_KILLPID
+# -----------------------------------------------------------------------------
+
+
+
+# ----------------------------------------------------------------------------
+#       function CLF_GETIINAMUSERVERS
+# ----------------------------------------------------------------------------
+function CLF_GETIINAMUSERVERS
+{
+
+        CLF_MESSAGELOG "Getting list of DBMS servers from iinamu"
+
+# ------------------------------------------------------------------------------
+# Create a temporary file to laod list of servers into
+# ------------------------------------------------------------------------------
+        h_clf_list_of_iiname_servers=$h_clf_log_file_dir/$h_prog_name.list_of_iiname_servers.TMP.$h_clf_pid
+        CLF_CREATEFILE $h_clf_list_of_iiname_servers
+
+
+        printf "%s\n" "show servers" >> $h_clf_iinamu_feed
+        sleep 2
+
+        set -f
+
+        h_clf_iinamu_server_idx=0
+        h_clf_iinamu_line_count=0
+
+        while read h_clf_iinamu_server_class h_clf_iinamu_server_dblist h_clf_iinamu_listen_address h_clf_iinamu_restofline
+        do
+# -----------------------------------------------------------------------------
+# Ignore the 1st 3 lines :
+#    Ingres NAME SERVICE MANAGEMENT UTILITY --
+#    -- Copyright (c) 2004 Ingres Corporation
+#    IINAMU>
+# -----------------------------------------------------------------------------
+
+           (( h_clf_iinamu_line_count=h_clf_iinamu_line_count+1 ))
+
+           if [ $h_clf_iinamu_line_count -le 3 ]
+           then
+              continue
+           fi
+
+
+           (( h_clf_iinamu_server_idx=h_clf_iinamu_server_idx+1 ))
+
+           printf "%s\t%s\t%s\n" ${h_clf_iinamu_server_class} ${h_clf_iinamu_server_dblist} ${h_clf_iinamu_listen_address} >> $h_clf_list_of_iiname_servers
+
+#           ha_clf_iinamu_server_class[$h_clf_iinamu_server_idx]=${h_clf_iinamu_server_class}
+#           ha_clf_iinamu_server_dblist[$h_clf_iinamu_server_idx]=${h_clf_iinamu_server_dblist}
+#           ha_clf_iinamu_listen_address[$h_clf_iinamu_server_idx]=${h_clf_iinamu_listen_address}
+
+        done < $h_clf_iinamu_log
+
+        set +f
+
+        h_clf_noof_iinamu_servers=$h_clf_iinamu_server_idx
+
+   return 0
+
+}
+# -----------------------------------------------------------------------------
+#       End of Function: CLF_GETIINAMUSERVERS
+# -----------------------------------------------------------------------------
+
+
+
+function CLF_TIME_T_TO_INGRES_DATE
+{
+
+   h_clf_ingres_date_time=""
+
+#----------------------------------------------------------------------------
+# If no parameter is passed, return a blank date
+#----------------------------------------------------------------------------
+   if [ -z "$1" ]
+   then
+      return 0
+   fi
+
+#----------------------------------------------------------------------------
+# Convert the supplied time_t into an ingres date/time
+#----------------------------------------------------------------------------
+   h_clf_time_t=$1
+   h_clf_ingres_date_time=`date +"%d-%b-%Y %H:%M:%S" -d @$h_clf_time_t`
+
+   if [ $? -ne 0 ]
+   then
+      h_clf_ingres_date_time=""
+   fi
+
+   return 0
+
+}
+# ----------------------------------------------------------------------------
+# End of Function: CLF_TIME_T_TO_INGRES_DATE
+# ----------------------------------------------------------------------------
+
+
+
+
+
+
+
+# ----------------------------------------------------------------------------
+#       function CLF_SETUP_X100
+# ----------------------------------------------------------------------------
+function CLF_SETUP_X100
+{
+
+        CLF_MESSAGELOG "Setting up IngresVector (IVW) parameters"
+
+# ------------------------------------------------------------------------------
+#  Does this look like an IVW installation?
+# ------------------------------------------------------------------------------
+
+   h_clf_x100_client=`which x100_client 2>/dev/null`
+
+   if [ $? -ne 0 ]
+   then
+      printf "%s\n" "Unable to locate the x100_client program - is this really an IVW installation?"
+      exit $h_clf_nagios_state_critical
+   fi
+
+
+# ------------------------------------------------------------------------------
+# Has II_VWDATA been already setup, and if so, does it point to something we
+# can use?
+# ------------------------------------------------------------------------------
+
+   if [ -z "$h_clf_vw_default_data_locn" ]
+   then
+      printf "%s\n" "It looks as though Vector default data location has not been set  - is this really an IVW installation?"
+      exit $h_clf_nagios_state_critical
+   fi
+
+
+   if [ -z "$h_clv_database_name" ]
+   then
+      printf "%s\n" "No database name has been provided"
+      exit $h_clf_nagios_state_critical
+   fi
+
+#   echo $h_clf_vw_default_data_locn
+
+   if [ ! -d "$h_clf_vw_default_data_locn" ]
+   then
+      printf "%s\n" "$h_clv_database_name database does not have any Vector tables"
+      exit $h_clf_nagios_state_critical
+   fi
+
+# ----------------------------------------------------------------------------
+# Point to the IVW lock file (but do not do anything with it just yet)
+# ----------------------------------------------------------------------------
+   h_clf_ivw_lock_file="$h_clf_vw_default_data_locn"/CBM/lock
+
+
+
+# ------------------------------------------------------------------------------
+# Point to the passfile
+# ------------------------------------------------------------------------------
+
+   h_clf_ivw_passfile="$h_clf_vw_default_data_locn"/authpass
+
+   if [ ! -f "$h_clf_ivw_passfile" ]
+   then
+      printf "%s\n" "$h_clv_database_name database does not have a passfile"
+      exit $h_clf_nagios_state_critical
+   fi
+
+
+   return 0
+
+}
+# ----------------------------------------------------------------------------
+# End of Function: CLF_SETUP_X100
+# ----------------------------------------------------------------------------
+
+
+
+
+# ----------------------------------------------------------------------------
+#       function CLF_PING_X100
+#
+# Return status:
+#   0 = Ping x100 server success
+#   1 = Unable to connect to database via call vectorwise
+#   2 = Unable to read lock file (after a forced start of a server)
+#   3 = Lock files exists and is readble, but no port number found.
+#   4 = Unable to ping the x100 server (after a forced start of a server)
+# ----------------------------------------------------------------------------
+function CLF_PING_X100
+{
+
+        CLF_MESSAGELOG "Pinging the X100 server"
+
+# ------------------------------------------------------------------------------
+# Set the forced start flag which will be used to determine whether a we need
+# to force a server to start
+# ------------------------------------------------------------------------------
+
+   h_clf_ivw_forced_start="N"
+   h_clf_ivw_port=""
+
+# ------------------------------------------------------------------------------
+#  Does the IVW lock file exists (and is readable)
+# ------------------------------------------------------------------------------
+
+   if [ ! -r "$h_clf_ivw_lock_file" ]
+   then
+      h_clf_ivw_forced_start="Y"
+
+# ------------------------------------------------------------------------------
+# ... if it is readble, get the 1st port number from the lock file
+# ------------------------------------------------------------------------------
+   else
+#     h_clf_ivw_port=`head -n 1 "$h_clf_ivw_lock_file"`
+      read h_clf_ivw_port < "$h_clf_ivw_lock_file"
+
+# ------------------------------------------------------------------------------
+# ... Did we pick up a port number form the lock file?
+# ------------------------------------------------------------------------------
+      if [ -z $h_clf_ivw_port ]
+      then
+         h_clf_ivw_forced_start="Y"
+      fi
+   fi
+
+# ------------------------------------------------------------------------------
+# OK, if we have what we hope is a port number (i.e. forced start not to set Y)
+# lets try and ping the server
+# ------------------------------------------------------------------------------
+
+   if [ $h_clf_ivw_forced_start = "N" ]
+   then
+
+# echo $h_clf_x100_client
+# exit
+   
+      $h_clf_x100_client --ping --port $h_clf_ivw_port --passfile "$h_clf_ivw_passfile" > /dev/null 2>&1
+
+      if [ $? -ne 0 ]
+      then
+         h_clf_ivw_forced_start="Y"
+      fi
+   fi
+
+# ------------------------------------------------------------------------------
+# Now try to connect to the database via a CALL VECTORWISE.  This will force
+# an x100 server to start
+# ------------------------------------------------------------------------------
+
+   echo "CALL VECTORWISE (getconf 'server, port')\g" | sql $h_clv_database_name > /dev/null 2>&1
+
+   if [ $? -ne 0 ]
+   then
+      return 1
+   fi
+
+
+# ------------------------------------------------------------------------------
+# If an error was not returned, we should now be able to read the IVW lock file
+# ------------------------------------------------------------------------------
+
+   if [ ! -r "$h_clf_ivw_lock_file" ]
+   then
+
+      h_clf_ivw_forced_start="Y"
+
+      return 2
+   fi
+
+# ------------------------------------------------------------------------------
+# if it is readble, get the 1st port number from the lock file
+# ------------------------------------------------------------------------------
+#  h_clf_ivw_port=`head -n 1 "$h_clf_ivw_lock_file"`
+   read h_clf_ivw_port < "$h_clf_ivw_lock_file"
+
+# ------------------------------------------------------------------------------
+# Did we pick up a port number form the lock file?
+# ------------------------------------------------------------------------------
+   if [ -z $h_clf_ivw_port ]
+   then
+
+      h_clf_ivw_forced_start="Y"
+
+      return 3
+
+   fi
+
+
+# ------------------------------------------------------------------------------
+# OK, if we have what we hope is a port number lets try and ping the server
+# ------------------------------------------------------------------------------
+
+   "$h_clf_x100_client" --ping --port $h_clf_ivw_port --passfile "$h_clf_ivw_passfile" > /dev/null 2>&1
+
+   if [ $? -ne 0 ]
+   then
+
+      return 4
+
+   fi
+
+
+# ------------------------------------------------------------------------------
+# Looks like we have successfuly pinged and connected :-)
+# ------------------------------------------------------------------------------
+
+   return 0
+
+}
+# ----------------------------------------------------------------------------
+# End of Function: CLF_PING_X100
+# ----------------------------------------------------------------------------
+
+
+
+
+## ----------------------------------------------------------------------------
+##       function CLF_GET_X100_STATS
+##
+## Return status:
+##   0 = Query to get stats looks as though it has worked
+##   1 = Unable to get stats from x100 server
+## ----------------------------------------------------------------------------
+#function CLF_GET_X100_STATS
+#{
+#
+#        CLF_MESSAGELOG "Getting statistics from the X100 server"
+#
+## ------------------------------------------------------------------------------
+#
+#   h_clf_x100_default_query="SysScan('sys_stats', ['stat', 'value'])"
+#   h_clf_x100_query=${QUERY:-"$h_clf_x100_default_query"}
+#
+#   echo $h_clf_x100_query | $h_clf_x100_client -n --port $h_clf_ivw_port --passfile $h_clf_ivw_passfile > $h_clf_sql_log 2>/dev/null
+#   if [ $? -ne 0 ]
+#   then
+#
+#      return 1
+#
+#   fi
+#
+#
+## ------------------------------------------------------------------------------
+## Looks like we have successfully got the stats
+## ------------------------------------------------------------------------------
+#
+#   return 0
+#
+#}
+## ----------------------------------------------------------------------------
+## End of Function: CLF_GET_X100_STATS
+## ----------------------------------------------------------------------------
+
+
+# ----------------------------------------------------------------------------
+#       function CLF_GET_X100_STATS
+#
+# Return status:
+#   0 = Query to get active config looks as though it has worked
+#   1 = Unable to get active config from x100 server
+# ----------------------------------------------------------------------------
+function CLF_GET_X100_STATS
+{
+
+        CLF_MESSAGELOG "Getting statistics from the X100 server"
+
+# ------------------------------------------------------------------------------
+
+# ------------------------------------------------------------------------------
+# Is the command vwinfo or iivwinfo?
+# ------------------------------------------------------------------------------
+   h_clv_vwinfo_command=""
+
+   which iivwinfo 1> /dev/null 2>&1
+
+   if [ $? -eq 0 ]
+   then
+      h_clv_vwinfo_command="iivwinfo"
+   fi
+
+   which vwinfo 1> /dev/null 2>&1
+
+   if [ $? -eq 0 ]
+   then
+      h_clv_vwinfo_command="vwinfo"
+   fi
+
+
+   $h_clv_vwinfo_command -s $h_clv_database_name   > $h_clf_sql_log 2> $h_clf_sh_err_log
+
+# ------------------------------------------------------------------------------
+# Did the iivwinfo command run without error?
+# ------------------------------------------------------------------------------
+   if [ $? -ne 0 ]
+   then
+
+      return 1
+
+   fi
+
+# ------------------------------------------------------------------------------
+# Did the iivwcommand create any standard output?
+# ------------------------------------------------------------------------------
+   h_clv_wc=`cat $h_clf_sql_log | wc -l`
+
+   if [ $h_clv_wc -eq 0 ]
+   then
+
+      return 2
+
+   fi
+
+# ------------------------------------------------------------------------------
+# Did the iivwcommand create any error output?
+# ------------------------------------------------------------------------------
+   h_clv_wc=`cat $h_clf_sh_err_log | wc -l`
+
+   if [ $h_clv_wc -eq 0 ]
+   then
+
+      return 3
+
+   fi
+
+# ------------------------------------------------------------------------------
+# Looks like we have successfully got the stats
+# ------------------------------------------------------------------------------
+
+   return 0
+
+}
+# ----------------------------------------------------------------------------
+# End of Function: CLF_GET_X100_STATS
+# ----------------------------------------------------------------------------
+
+
+
+
+# ----------------------------------------------------------------------------
+#       function CLF_GET_X100_CONFIG
+#
+# Return status:
+#   0 = Query to get active config looks as though it has worked
+#   1 = Unable to get active config from x100 server
+# ----------------------------------------------------------------------------
+function CLF_GET_X100_CONFIG
+{
+
+        CLF_MESSAGELOG "Getting active config from the X100 server"
+
+# ------------------------------------------------------------------------------
+
+# ------------------------------------------------------------------------------
+# Is the command vwinfo or iivwinfo?
+# ------------------------------------------------------------------------------
+   h_clv_vwinfo_command=""
+
+   which iivwinfo 1> /dev/null 2>&1
+
+   if [ $? -eq 0 ]
+   then
+      h_clv_vwinfo_command="iivwinfo"
+   fi
+
+   which vwinfo 1> /dev/null 2>&1
+
+   if [ $? -eq 0 ]
+   then
+      h_clv_vwinfo_command="vwinfo"
+   fi
+
+
+   $h_clv_vwinfo_command -c $h_clv_database_name  > $h_clf_sql_log 2>/dev/null
+   if [ $? -ne 0 ]
+   then
+
+      return 1
+
+   fi
+
+
+# ------------------------------------------------------------------------------
+# Looks like we have successfully got the config
+# ------------------------------------------------------------------------------
+
+   return 0
+
+}
+# ----------------------------------------------------------------------------
+# End of Function: CLF_GET_X100_CONFIG
+# ----------------------------------------------------------------------------
+
+
+# ----------------------------------------------------------------------------
+#       function CLF_GET_VWINFO
+#
+# Return status:
+#   0 = Query to get iivwinfo details has worked
+#   1 = Unable to get iivwinfo details from x100 server
+# ----------------------------------------------------------------------------
+function CLF_GET_VWINFO
+{
+
+        CLF_MESSAGELOG "Getting iivwinfo details from the X100 server"
+
+# ------------------------------------------------------------------------------
+
+
+# ------------------------------------------------------------------------------
+# Is the command vwinfo or iivwinfo?
+# ------------------------------------------------------------------------------
+   h_clv_vwinfo_command=""
+
+   which iivwinfo 1> /dev/null 2>&1
+
+   if [ $? -eq 0 ]
+   then
+      h_clv_vwinfo_command="iivwinfo"
+   fi
+
+   which vwinfo 1> /dev/null 2>&1
+
+   if [ $? -eq 0 ]
+   then
+      h_clv_vwinfo_command="vwinfo"
+   fi
+
+   touch $h_clf_sql_log
+   touch $h_clf_sh_err_log
+
+   $h_clv_vwinfo_command $1 $h_clv_database_name  >> $h_clf_sql_log 2>> $h_clf_sh_err_log
+
+# ------------------------------------------------------------------------------
+# Did the iivwinfo command run without error?
+# ------------------------------------------------------------------------------
+   if [ $? -ne 0 ]
+   then
+
+      return 1
+
+   fi
+
+# ------------------------------------------------------------------------------
+# Did the iivwcommand create any standard output?
+# ------------------------------------------------------------------------------
+   h_clv_wc=`cat $h_clf_sql_log | wc -l`
+
+   if [ $h_clv_wc -eq 0 ]
+   then
+
+      return 2
+
+   fi
+
+# ------------------------------------------------------------------------------
+# Did the iivwcommand create any error output?
+# ------------------------------------------------------------------------------
+   h_clv_wc=`cat $h_clf_sh_err_log | wc -l`
+
+   if [ $h_clv_wc -gt 0 ]
+   then
+
+      return 3
+
+   fi
+
+
+# ------------------------------------------------------------------------------
+# Looks like we have successfully got the iivwinfo details
+# ------------------------------------------------------------------------------
+
+   return 0
+
+}
+# ----------------------------------------------------------------------------
+# End of Function: CLF_GET_VWINFO
+# ----------------------------------------------------------------------------
+
+
+
+
+
+# ----------------------------------------------------------------------------
+#       function CLF_CONVERTBYTES
+# ----------------------------------------------------------------------------
+function CLF_CONVERTBYTES
+{
+
+   h_clv_bytes=$1
+   h_clv_bytes_string=""
+
+   if [ -z ${h_clv_bytes} ]
+   then
+      return 0
+   fi
+
+   h_clv_kilo=$( echo "scale=1; $h_clv_bytes / 1024" | bc )
+   h_clv_kiloint=$( echo "$h_clv_bytes / 1024" | bc )
+
+   h_clv_mega=$( echo "scale=1; $h_clv_kilo / 1024" | bc )
+   h_clv_megaint=$( echo "$h_clv_kilo / 1024" | bc )
+
+   h_clv_giga=$( echo "scale=1; $h_clv_mega / 1024" | bc )
+   h_clv_gigaint=$( echo "$h_clv_mega / 1024" | bc )
+
+   h_clv_tera=$( echo "scale=1; $h_clv_giga / 1024" | bc )
+   h_clv_teraint=$( echo "$h_clv_giga / 1024" | bc )
+
+   h_clv_peta=$( echo "scale=1; $h_clv_tera / 1024" | bc )
+   h_clv_petaint=$( echo "$h_clv_tera / 1024" | bc )
+
+   if [ $h_clv_kiloint -lt 1 ] ; then
+      h_clv_bytes_string="$h_clv_bytes bytes"
+   elif [ $h_clv_megaint -lt 1 ] ; then
+      h_clv_bytes_string="${h_clv_kilo} KB"
+   elif [ $h_clv_gigaint -lt 1 ] ; then
+      h_clv_bytes_string="${h_clv_mega} MB"
+   elif [ $h_clv_teraint -lt 1 ] ; then
+      h_clv_bytes_string="${h_clv_giga} GB"
+   elif [ $h_clv_petaint -lt 1 ] ; then
+      h_clv_bytes_string="${h_clv_tera} TB"
+   else
+      h_clv_bytes_string="${h_clv_peta} PB"
+   fi
+
+   return 0
+
+}
+# ----------------------------------------------------------------------------
+# End of Function: CLF_CONVERTBYTES
+# ----------------------------------------------------------------------------
+
+
+
+#-----------------------------------------------------------------------------
+# Function:
+#       CLF_CHECK_AVAILABILITY - Check availability of installation or database
+#
+#-----------------------------------------------------------------------------
+function CLF_CHECK_AVAILABILITY
+{
+
+if [ "$1" = "" ]
+	then
+	echo "Parameter not supplied for availability check"
+	CLF_TIDYUP 1
+	exit ${h_clf_nagios_state_unknown}
+	fi
+
+if [ "$1" = "inst" ]
+        then
+        DB="iidbdb"
+        else
+        DB="$1"
+        fi
+
+if [ `ls $II_SYSTEM/ingres/*/data/*.flg 2>/dev/null | wc -l` -gt 0 ]
+	then
+	#RDBA accounts will use shutdown flag
+	if [ -f $II_SYSTEM/ingres/*/data/shutdown.flg ]
+		then
+		echo "Installation is shutdown"
+		echo "Shutdown flag '$II_SYSTEM/ingres/*/data/shutdown.flg' is set"
+		CLF_TIDYUP 1
+		exit ${h_clf_nagios_state_depwait}
+		fi
+	#RDBA accounts will use checkpoint flag
+	if [ -f $II_SYSTEM/ingres/*/data/ckp_${DB}_running.flg ]
+		then
+		echo "Database checkpoint is running"
+		echo "Checkpoint flag '$II_SYSTEM/ingres/*/data/ckp_${DB}_running.flg' is set"
+		CLF_TIDYUP 1
+		exit ${h_clf_nagios_state_depwait}
+		fi
+	#RDBA accounts will use maintenance flag
+	if [ -f $II_SYSTEM/ingres/*/data/opt_${DB}_running.flg ]
+		then
+		echo "Database maintenance is running"
+		echo "Maintenance flag '$II_SYSTEM/ingres/*/data/opt_${DB}_running.flg' is set"
+		CLF_TIDYUP 1
+		exit ${h_clf_nagios_state_depwait}
+		fi
+	if [ -f $II_SYSTEM/ingres/*/data/opt_iidbdb_running.flg ]
+		then
+		echo "Database maintenance is running"
+		echo "Maintenance flag '$II_SYSTEM/ingres/*/data/opt_iidbdb_running.flg' is set"
+		CLF_TIDYUP 1
+		exit ${h_clf_nagios_state_depwait}
+		fi
+	#RDBA accounts will use restore flag
+	if [ -f $II_SYSTEM/ingres/*/data/restore_${DB}_running.flg ]
+		then
+		echo "Database recovery is running"
+		echo "Restore flag '$II_SYSTEM/ingres/*/data/restore_${DB}_running.flg' is set"
+		CLF_TIDYUP 1
+		exit ${h_clf_nagios_state_depwait}
+		fi
+        #RDBA accounts will use general maintenance flag
+        if [ -f $II_SYSTEM/ingres/*/data/opt_running.flg ]
+                then
+                echo "General maintenance is running"
+                echo "Maintenance flag '$II_SYSTEM/ingres/*/data/opt_running.flg' is set"
+                CLF_TIDYUP 1
+                exit ${h_clf_nagios_state_depwait}
+                fi
+	fi
+
+if [ "$1" != "inst" ]
+	then
+	if [ `ps -ef | grep "relocdb" | grep "$II_SYSTEM/ingres" | grep "-new_database=" | wc -l` != 0 ]
+        	then
+        	echo "Check halted due to 'relocatedb' running"
+        	echo "This command can cause plugin timeout problems"
+        	exit ${h_clf_nagios_state_depwait}
+        	fi
+	fi
+
+OUTFILE="${h_clf_log_file_dir}/ema_availability_output.$$"
+COMPFLAG="${h_clf_log_file_dir}/ema_availability_complete.$$"
+rm -f ${OUTFILE}
+rm -f ${COMPFLAG}
+let COUNTER=0
+let MAX_DURATION=15	# Response window (seconds). This value must be less than plugin or service check timeout values
+
+if [ "${h_clf_os}" = "W" -o "$1" = "inst" ]
+	then
+	(echo "\q" | sql ${DB} >${OUTFILE} 2>&1; touch ${COMPFLAG}) &
+	CONDITION1='echo ${DBOUT} | grep E_'
+	CONDITION2='echo ${DBOUT} | egrep "(E_US0010|E_DM012A)"'
+	CONDITION3='echo ${DBOUT} | grep E_US0014'
+	CONDITION4='echo ${DBOUT} | egrep "(E_US0073|E_LQ0001)"'
+	CONDITION5='ps -W | grep "x100_server" | grep "${h_clf_ingprenv_ii_installation}" | wc -l'
+	else
+	(verifydb -mreport -sdbname ${DB} -oaccess_check >${OUTFILE} 2>&1; touch ${COMPFLAG}) &
+	CONDITION1='echo ${DBOUT} | grep -v S_DU04CE_ACCESSIBLE'
+	CONDITION2='echo ${DBOUT} | egrep "(E_DU3020|E_US0010|E_DM012A)"'
+	CONDITION3='echo ${DBOUT} | grep E_US0014'
+	CONDITION4='echo ${DBOUT} | grep E_DU501A'
+	CONDITION5='ps -ef | grep "iix100" | grep "dbname ${DB}" | grep "iiinst ${h_clf_ingprenv_ii_installation}" | wc -l'
+	fi
+
+while [ ! -f ${COMPFLAG} ]
+	do
+	sleep 1
+	let COUNTER=${COUNTER}+1
+	if [ ${COUNTER} -gt ${MAX_DURATION} ]
+		then
+        	if [ "${MASTER}" = "YES" -a "$1" = "inst" ]
+                	then
+			echo "Availability check not responding (Response window = ${MAX_DURATION} secs)"
+			kill -s STOP $! >/dev/null 2>&1		# Anything stronger than 'STOP' kills the nagios session
+			sleep 1
+			CLF_TIDYUP 1
+			exit ${h_clf_nagios_state_unknown}
+			else
+			echo "Check halted as availability check not responding"
+			kill -s STOP $! >/dev/null 2>&1		# Anything stronger than 'STOP' kills the nagios session
+			sleep 1
+			CLF_TIDYUP 1
+			exit ${h_clf_nagios_state_depwait}
+			fi
+		fi
+	done
+
+DBOUT="`cat ${OUTFILE} | sed 's/*//g'`"
+
+rm -f ${OUTFILE}
+rm -f ${COMPFLAG}
+
+#Only apply additional checks if database/installation is not available
+if [ "`eval ${CONDITION1}`" ]
+	then
+	#Does database exist?
+	if [ "`eval ${CONDITION2}`" ]
+        	then
+        	if [ "${MASTER}" = "YES" ]
+                	then
+			echo "Database does not exist (or is being recovered)"
+			CLF_TIDYUP 1
+			exit ${h_clf_nagios_state_warning}
+                	fi
+		echo "Check halted as database does not exist (or is being recovered)"
+		CLF_TIDYUP 1
+		exit ${h_clf_nagios_state_depwait}
+		fi
+	#Is database exclusively locked?
+	if [ "`eval ${CONDITION3}`" ]
+        	then
+        	if [ "${MASTER}" = "YES" ]
+                	then
+			echo "Database is exclusively locked"
+			CLF_TIDYUP 1
+			exit ${h_clf_nagios_state_warning}
+                	fi
+		echo "Check halted as database is exclusively locked"
+		CLF_TIDYUP 1
+		exit ${h_clf_nagios_state_depwait}
+		fi
+	#Is installation available?
+	if [ "`eval ${CONDITION4}`" ]
+        	then
+        	if [ "${MASTER}" = "YES" -a "$1" = "inst" ]
+                	then
+			echo "Installation is unavailable"
+          		if [ "${h_clf_os}" = "L" ]
+				then	
+				echo " "
+				ingstatus
+				fi
+			CLF_TIDYUP 1
+			exit ${h_clf_nagios_state_warning}
+                	fi
+		echo "Check halted as installation is unavailable"
+		CLF_TIDYUP 1
+		exit ${h_clf_nagios_state_depwait}
+        	fi
+	#Spurious verifydb/sql output
+	echo ${DBOUT} >${h_clf_log_file_dir}/avail_${DB}.tmp
+        if [ "${MASTER}" = "YES" ]
+                then
+		echo "Availability cannot be determined"
+		CLF_TIDYUP 1
+		exit ${h_clf_nagios_state_unknown}
+		else
+		echo "Check halted as availability cannot be determined"
+		CLF_TIDYUP 1
+		exit ${h_clf_nagios_state_unknown}
+		fi
+	fi
+
+#Is x100 server available (just for Vector databases)?
+if [ "$2" = "VW" -a "$1" != "inst" ]
+	then
+	if [ `eval ${CONDITION5}` = 0 ]
+	   	then
+       	    	if [ "${MASTER}" = "YES" ]
+               	    	then
+		    	echo "Database is available but x100 process is not running"
+			CLF_TIDYUP 1
+		    	exit ${h_clf_nagios_state_warning}
+               	    	fi
+	    	echo "Check halted as database is available but x100 process is not running"
+		CLF_TIDYUP 1
+	    	exit ${h_clf_nagios_state_depwait}
+	    	fi
+	fi
+}
+# ----------------------------------------------------------------------------
+# End of Function: CLF_CHECK_AVAILABILITY
+# ----------------------------------------------------------------------------
+
+# ----------------------------------------------------------------------------
+# function CLF_IS_CONSOLE_RUNNING
+# ----------------------------------------------------------------------------
+function CLF_IS_CONSOLE_RUNNING
+{
+
+# NB: For this prototype, much of the following has been hardcoded.
+#     Once this prototype is complete, these hardcoded entries must
+#     take variables provided either at run time or from an EMA
+#     parameter file.
+
+   h_clv_console_dir="/opt/paraccel/console"
+   h_clv_console_derby_db="//opt/paraccel/console/db-derby/padbconsole"
+   h_clv_console_host="localhost"
+   h_clv_derby_sql_command="/opt/paraccel/console/db-derby/bin/ij"
+   h_clv_query_text_trunc=80
+
+   h_clv_is_console_running_status=""
+   h_clv_console_derby_port_no=""
+   h_clv_console_tomcat_port_no=""
+
+
+# RETURN STATES:
+#
+#   0 = OK
+#   1 = Console does not appear to be installed
+#   2 = Console is installed but not currently running
+#   3 = Console is installed but some other error is reported
+#   4 = Console is installed but did not generate any output
+#   5 = Console is installed but did not report the Derby port number
+#   6 = Console is installed but did not report the Tomcat port number
+
+   CLF_MESSAGELOG "Checking if the Matrix (PADB) Console is running"
+
+   export h_clv_is_console_running_status=9999
+
+# ----------------------------------------------------------------------------
+# Has the console been installed?
+# ----------------------------------------------------------------------------
+
+   which "$h_clv_console_dir/is_console_running.sh" 1>/dev/null 2>&1
+
+   if [ $? -ne 0 ]
+   then
+      h_clv_is_console_running_status=1
+      h_clv_is_console_running_status_text="Console not installed"
+      return
+   fi
+
+# ----------------------------------------------------------------------------
+# Is the console running?
+# ----------------------------------------------------------------------------
+
+   $h_clv_console_dir/is_console_running.sh > $h_clf_sql_log 2> $h_clf_sh_err_log
+
+   h_console_return=$?
+
+   if [ $h_console_return -eq 2 ]
+   then
+      h_clv_is_console_running_status=2
+      h_clv_is_console_running_status_text="Console is not running"
+      return
+   fi
+
+   if [ $h_console_return -ne 0 ]
+   then
+      h_clv_is_console_running_status=3
+      h_clv_is_console_running_status_text="Unknown Console status"
+      return
+   fi
+
+# ----------------------------------------------------------------------------
+# Did the console running command run but not create any output
+# ----------------------------------------------------------------------------
+
+   h_clv_wc=`cat $h_clf_sql_log | wc -l`
+
+   if [ $h_clv_wc -eq 0 ]
+   then
+      h_clv_is_console_running_status=4
+      h_clv_is_console_running_status_text="No results returned from Console"
+      return
+   fi
+
+# ----------------------------------------------------------------------------
+# Can we get the Derby port number?
+# ----------------------------------------------------------------------------
+
+   h_clv_console_derby_port_no=""
+
+   h_clv_console_derby_port_no=`cat $h_clf_sql_log | grep Derby | awk -F" " '{print $9}' | awk -F"." '{print $1}'`
+
+   if [ -z "$h_clv_console_derby_port_no" ]
+   then
+      h_clv_is_console_running_status=5
+      h_clv_is_console_running_status_text="Unable to determine Derby port number"
+      return
+   fi
+
+
+# ----------------------------------------------------------------------------
+# Can we get the Tomcat port number?
+# ----------------------------------------------------------------------------
+
+   h_clv_console_tomcat_port_no=""
+
+   h_clv_console_tomcat_port_no=`cat $h_clf_sql_log | grep Tomcat | awk -F" " '{print $9}' | awk -F"." '{print $1}'`
+
+   if [ -z "$h_clv_console_tomcat_port_no" ]
+   then
+      h_clv_is_console_running_status=6
+      h_clv_is_console_running_status_text="Unable to determine Tomcat port number"
+      return
+   fi
+
+
+# ----------------------------------------------------------------------------
+# Looks like we have successfully got the Console running
+# ----------------------------------------------------------------------------
+
+   h_clv_is_console_running_status=0
+   h_clv_is_console_running_status_text="Console in running"
+   return 
+   
+}
+# ----------------------------------------------------------------------------
+# End of Function: CLF_IS_CONSOLE_RUNNING
+# ----------------------------------------------------------------------------
+
+
+
+
+#----------------------------------------------------------------------------
+# End of Common Functions
+#----------------------------------------------------------------------------
+
+
+#----------------------------------------------------------------------------
+# End of Script
+#----------------------------------------------------------------------------

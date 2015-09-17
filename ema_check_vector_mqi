@@ -1,0 +1,2652 @@
+#!/bin/bash
+#
+# Copyright 2014 Actian Corporation
+#
+# Program Ownership and Restrictions.
+#
+# This Program (Shell Script) provided hereunder is licensed, not sold, and all
+# intellectual property rights and title to the Program shall remain with Actian
+# and Our suppliers and no interest or ownership therein is conveyed to you.
+#
+# No right to create a copyrightable work, whether joint or unitary, is granted
+# or implied; this includes works that modify (even for purposes of error
+# correction), adapt, or translate the Program or create derivative works, 
+# compilations, or collective works therefrom, except as necessary to configure
+# the Program using the options and tools provided for such purposes and
+# contained in the Program. 
+#
+# The Program is supplied directly to you for use as defined by the controlling
+# documentation e.g. a Consulting Agreement and for no other reason.  
+#
+# You will treat the Program as confidential information and you will treat it
+# in the same manner as you would to protect your own confidential information,
+# but in no event with less than reasonable care.
+#
+# The Program shall not be disclosed to any third party (except solely to
+# employees, attorneys, and consultants, who need to know and are bound by a
+# written agreement with Actian to maintain the confidentiality of the Program
+# in a manner consistent with this licence or as defined in any other agreement)
+# or used except as permitted under this licence or by agreement between the
+# parties.
+#
+
+#----------------------------------------------------------------------------
+#
+# Name:
+#   ema_check_vector_mqi
+#
+# Description:
+#   Monitor various Vector metrics using the MQI command
+#
+# History:
+#   1.0 04-Oct-2014 (mark.whalley@actian.com)
+#       Created from a Post-It note definition
+#
+#   1.1 28-Aug-2015 (mark.whalley@actian.com)
+#       Added service checks for file descriptors
+#
+#   1.2 17-Sep-2015 (mark.whalley@actian.com)
+#       Resolved problem whereby df can report results for individual file 
+#       systems over more than one line (--human-readable --portability)
+#
+#       Removal of options that are not applicable to Vector-H
+#
+#
+#----------------------------------------------------------------------------
+h_prog_name=`basename ${0}`
+h_prog_version=v1.2
+#----------------------------------------------------------------------------
+#
+
+#----------------------------------------------------------------------------
+# Function:
+#   TERMINATE - Exit the program with a Nagios return status
+#----------------------------------------------------------------------------
+TERMINATE()
+{
+
+   CLF_MESSAGELOG Function: TERMINATE
+
+   h_final_exit_status=$1
+
+#----------------------------------------------------------------------------
+# Depending on the final exit status provided to this function, translate
+# the status into the standard Nagios message to prefix the returned status
+# line
+#----------------------------------------------------------------------------
+   case "$h_final_exit_status" in
+      0)  h_nagios_status=$h_clf_nagios_msg_ok;;
+      1)  h_nagios_status=$h_clf_nagios_msg_warning;;
+      2)  h_nagios_status=$h_clf_nagios_msg_critical;;
+      3)  h_nagios_status=$h_clf_nagios_msg_unknown;;
+      *)  h_nagios_status="Unknown Nagios status";;
+   esac
+
+
+#----------------------------------------------------------------------------
+# Write out a status message to Nagios
+#----------------------------------------------------------------------------
+
+   printf "%s\n" "$h_full_nagios_message"
+
+   cat $h_clf_multi_line_status
+
+   CLF_TIDYUP 1
+
+   exit $h_final_exit_status
+
+#----------------------------------------------------------------------------
+# End of Function: TERMINATE
+#----------------------------------------------------------------------------
+}
+
+
+
+
+
+#----------------------------------------------------------------------------
+# Function:
+#   INITIALIZE - set up local variables 
+#----------------------------------------------------------------------------
+INITIALIZE()
+{
+
+
+#----------------------------------------------------------------------------
+# XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+#----------------------------------------------------------------------------
+#
+# WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING
+#
+# PLEASE be very careful when amending this section.  much of what is set up
+# here is used by the common library functions to set up environments etc
+# for the rest of this program.
+#
+#----------------------------------------------------------------------------
+# XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+#----------------------------------------------------------------------------
+
+#----------------------------------------------------------------------------
+# Enviroment setup:
+#----------------------------------------------------------------------------
+
+#----------------------------------------------------------------------------
+# If called from NRPE, "pwd" is set to directory of this script, in which
+# case use it...
+#----------------------------------------------------------------------------
+   h_prog_path=`pwd`
+
+#----------------------------------------------------------------------------
+# ... check to see if the common functions is in the h_prog_path.
+#     If it is not (typical if this was called via sSH),
+#     then try /usr/local/nagios/libexec, and if not in there, try
+#     /usr/local/nagios/lib, and if we still cant find it, then not
+#     much point in continuing :-(
+#----------------------------------------------------------------------------
+
+   h_mqi_prog_path=$h_prog_path
+
+   if [ ! -f $h_mqi_prog_path/mqi ]
+   then
+      h_mqi_prog_path=/usr/local/nagios/libexec
+
+      if [ ! -f $h_mqi_prog_path/mqi ]
+      then
+         h_mqi_prog_path=/usr/local/nagios/lib
+
+         if [ ! -f $h_mqi_prog_path/mqi ]
+         then
+            h_clf_last_error_message="unable to locate mqi in $h_mqi_prog_path"
+            TERMINATE $h_clf_nagios_state_critical
+         fi
+      fi
+   fi
+
+
+   if [ ! -f $h_prog_path/ema_common_library_functions ]
+   then
+      h_prog_path=/usr/local/nagios/libexec
+
+      if [ ! -f $h_prog_path/ema_common_library_functions ]
+      then
+         h_prog_path=/usr/local/nagios/lib
+
+         if [ ! -f $h_prog_path/ema_common_library_functions ]
+         then
+            h_clf_last_error_message="unable to locate ema_common_library_functions in $h_prog_path"
+            TERMINATE $h_clf_nagios_state_critical
+         fi
+      fi
+   fi
+
+
+#----------------------------------------------------------------------------
+# ... OK, lets load the common library functions (CLF)
+#----------------------------------------------------------------------------
+. $h_prog_path/ema_common_library_functions
+
+CLF_SETUPCOMMONVARIABLES
+CLF_CREATELOGFILES
+CLF_SETUPPATHS $h_clv_ii_system
+CLF_GETINGPRENV
+
+
+
+
+#----------------------------------------------------------------------------
+# XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+#----------------------------------------------------------------------------
+#
+# OK, it is generally safe to add stuff from here down.
+# PLEASE read WARNING above.
+#
+#----------------------------------------------------------------------------
+# XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+#----------------------------------------------------------------------------
+
+#----------------------------------------------------------------------------
+# Declare local variables specific to this script (others should be declared
+# in the common library functions)
+#----------------------------------------------------------------------------
+
+#----------------------------------------------------------------------------
+# Create any test-specific files
+#----------------------------------------------------------------------------
+
+   h_clf_multi_line_status=$h_clf_log_file_dir/$h_prog_name.multi_line_status.TMP.$h_clf_pid
+   CLF_CREATEFILE $h_clf_multi_line_status
+
+
+
+
+#----------------------------------------------------------------------------
+
+#----------------------------------------------------------------------------
+# What's the date and time (of starting this)
+#----------------------------------------------------------------------------
+   CLF_CURDATETIME
+   h_prog_start_datetime=$h_clf_cur_datetime
+   h_prog_end_datetime=""
+
+   h_warning_issued="N"
+   h_critical_issued="N"
+
+#----------------------------------------------------------------------------
+# End of Function: INITIALIZE
+#----------------------------------------------------------------------------
+}
+
+
+
+
+
+
+
+
+
+
+#----------------------------------------------------------------------------
+# Function:
+#   CHECK_MOUNTED_FILE_SYSTEM_SPACE
+#----------------------------------------------------------------------------
+CHECK_MOUNTED_FILE_SYSTEM_SPACE()
+{
+
+   CLF_MESSAGELOG Function: CHECK_MOUNTED_FILE_SYSTEM_SPACE
+
+   $h_mqi_prog_path/mqi -v -p v -s $h_clv_ii_system -allx sudo df --human-readable --portability 1>$h_clf_sql_log
+
+   h_node_idx=0
+   h_node_disk_idx=0
+
+   while read h_node_line
+   do
+
+      if [ -z "$h_node_line" ]
+      then
+         continue
+      fi
+
+      set $h_node_line
+
+      case $1 in
+
+      "Filesystem"|"tmpfs"|"cdrom"|"rootfs"|"/dev/sr0")
+         continue;;
+
+      "Local")
+         (( h_node_idx += 1 ))
+
+         h_node_locn="L"
+         h_df_node_ip=$3
+
+         continue;;
+
+      "Remote")
+         (( h_node_idx += 1 ))
+
+         h_node_locn="R"
+         h_df_node_ip=$3
+
+         continue;;
+
+      esac
+
+      (( h_node_disk_idx += 1 ))
+
+      ha_df_node_locn[$h_node_disk_idx]=$h_node_locn
+      ha_df_node_ip[$h_node_disk_idx]=$h_df_node_ip
+      ha_df_fs[$h_node_disk_idx]=$1
+      ha_df_1k_blocks[$h_node_disk_idx]=$2
+      ha_df_used[$h_node_disk_idx]=$3
+      ha_df_avail[$h_node_disk_idx]=$4
+
+      h_df_use_pc=`echo $5 | awk -F'%' '{print $1}'`
+      ha_df_use_pc[$h_node_disk_idx]=$h_df_use_pc
+
+      ha_df_mounted[$h_node_disk_idx]=$6
+
+   done < $h_clf_sql_log
+
+
+   h_noof_nodes=$h_node_idx
+   h_noof_node_disks=$h_node_disk_idx
+
+   h_noof_disks_warn=0
+   h_noof_disks_crit=0
+   h_noof_disks_ok=0
+
+   h_node_disk_idx=0
+
+   h_pc="%"
+
+   h_last_node_ip=""
+
+   while [ $h_node_disk_idx -lt $h_noof_node_disks ]
+   do
+
+      (( h_node_disk_idx += 1 )) 
+
+      h_df_node_locn=${ha_df_node_locn[$h_node_disk_idx]}
+      h_df_node_ip=${ha_df_node_ip[$h_node_disk_idx]}
+      h_df_fs=${ha_df_fs[$h_node_disk_idx]}
+      h_df_1k_blocks=${ha_df_1k_blocks[$h_node_disk_idx]}
+      h_df_used=${ha_df_used[$h_node_disk_idx]}
+      h_df_avail=${ha_df_avail[$h_node_disk_idx]}
+      h_df_use_pc=${ha_df_use_pc[$h_node_disk_idx]}
+      h_df_mounted=${ha_df_mounted[$h_node_disk_idx]}
+
+      if [ "$h_last_node_ip" != "$h_df_node_ip" ]
+      then
+
+         h_last_node_ip=$h_df_node_ip
+
+         printf "%s\n" "" >> $h_clf_multi_line_status
+         printf "%s\n" "Node: $h_df_node_ip:" >> $h_clf_multi_line_status
+	 
+      fi
+
+      if [ $h_df_use_pc -ge $h_clv_critical_percent ]
+      then
+         (( h_noof_disks_crit += 1 ))
+
+         printf "%s\n" "   CRITICAL: $h_df_fs ($h_df_mounted) Capacity: $h_df_1k_blocks Used: $h_df_used ($h_df_use_pc$h_pc) Free: $h_df_avail" >> $h_clf_multi_line_status
+
+      else
+         if [ $h_df_use_pc -ge $h_clv_warning_percent ]
+         then
+            (( h_noof_disks_warn += 1 ))
+   
+             printf "%s\n" "   WARNING: $h_df_fs ($h_df_mounted) Capacity: $h_df_1k_blocks Used: $h_df_used ($h_df_use_pc$h_pc) Free: $h_df_avail" >> $h_clf_multi_line_status
+
+         else
+
+            (( h_noof_disks_ok += 1 ))
+
+            printf "%s\n" "   OK: $h_df_fs ($h_df_mounted) Capacity: $h_df_1k_blocks Used: $h_df_used ($h_df_use_pc$h_pc) Free: $h_df_avail" >> $h_clf_multi_line_status
+
+         fi
+      fi
+
+   done < $h_clf_sql_log
+
+   printf "%s\n" "" >> $h_clf_multi_line_status
+
+#----------------------------------------------------------------------------
+# Build up the standard nagios message
+#----------------------------------------------------------------------------
+   h_std_nagios_message=""
+
+   if [ $h_noof_disks_ok -gt 0 ]
+   then 
+      h_std_nagios_message_ok="File Systems OK: "$h_noof_disks_ok" "
+   else
+      h_std_nagios_message_ok=""
+   fi
+
+   if [ $h_noof_disks_warn -gt 0 ]
+   then 
+      h_std_nagios_message_warn="File Systems Warning: "$h_noof_disks_warn" "
+   else
+      h_std_nagios_message_warn=""
+   fi
+
+   if [ $h_noof_disks_crit -gt 0 ]
+   then 
+      h_std_nagios_message_crit="File Systems Critical: "$h_noof_disks_crit" "
+   else
+      h_std_nagios_message_crit=""
+   fi
+
+   h_std_nagios_message=$h_std_nagios_message$h_std_nagios_message_ok$h_std_nagios_message_warn$h_std_nagios_message_crit
+
+
+#----------------------------------------------------------------------------
+# Build up the performance data section
+#----------------------------------------------------------------------------
+   h_performance_data="|mounted_file_systems: "
+
+   h_performance_data=$h_performance_data"file_systems_ok="$h_noof_disks_ok" file_systems_warn="$h_noof_disks_warn" file_systems_crit="$h_noof_disks_crit
+
+#----------------------------------------------------------------------------
+# Have we broken either warning or critical thresholds
+#----------------------------------------------------------------------------
+   if [ $h_noof_disks_warn -gt 0 ]
+   then
+      h_warning_issued="Y"
+   fi
+
+   if [ $h_noof_disks_crit -gt 0 ]
+   then
+      h_critical_issued="Y"
+   fi
+
+#----------------------------------------------------------------------------
+# Add PARAMETERS: to end of performance data
+#----------------------------------------------------------------------------
+   h_parameters="PARAMETERS:"
+
+   h_parameters=$h_parameters" TEST="$h_clv_test
+
+   h_parameters=$h_parameters" WARNING_PERCENT="$h_clv_warning_percent
+   h_parameters=$h_parameters" CRITICAL_PERCENT="$h_clv_critical_percent
+
+   return 0
+
+#----------------------------------------------------------------------------
+# End of Function: CHECK_MOUNTED_FILE_SYSTEM_SPACE
+#----------------------------------------------------------------------------
+}
+
+
+
+
+#----------------------------------------------------------------------------
+# Function:
+#   CHECK_LOG_FILE_SIZE
+#----------------------------------------------------------------------------
+CHECK_LOG_FILE_SIZE()
+{
+
+   CLF_MESSAGELOG Function: CHECK_LOG_FILE_SIZE
+
+   CLF_GETHDFSDATA
+
+   h_log_file_size=`hdfs dfs -ls "$h_clf_infodb_ii_hdfsdata"/CBM/LOG | awk -F" " '{print $5}'`
+
+
+
+#----------------------------------------------------------------------------
+# Build up the standard nagios message
+#----------------------------------------------------------------------------
+   h_std_nagios_message=""
+
+   CLF_CONVERTBYTES $h_log_file_size
+
+   if [ $h_log_file_size -ge $h_clv_critical_value ]
+   then
+
+      h_std_nagios_message="CRITICAL: LOG file is currently $h_clv_bytes_string"
+      h_critical_issued="Y"
+
+   else
+      if [ $h_log_file_size -ge $h_clv_warning_value ]
+      then
+
+         h_std_nagios_message="WARNING: LOG file is currently $h_clv_bytes_string"
+         h_warning_issued="Y"
+
+      else
+
+         h_std_nagios_message="OK: LOG file is currently $h_clv_bytes_string"
+
+      fi
+   fi
+
+   printf "%s\n" "" >> $h_clf_multi_line_status
+   printf "%s\n" "Location of LOG file: $h_clf_infodb_ii_hdfsdata/CBM" >> $h_clf_multi_line_status
+   printf "%s\n" "" >> $h_clf_multi_line_status
+
+
+#----------------------------------------------------------------------------
+# Build up the performance data section
+#----------------------------------------------------------------------------
+   h_performance_data="|log_file_size: "
+
+   h_performance_data=$h_performance_data"log_file_size="$h_log_file_size
+
+
+#----------------------------------------------------------------------------
+# Add PARAMETERS: to end of performance data
+#----------------------------------------------------------------------------
+   h_parameters="PARAMETERS:"
+
+   h_parameters=$h_parameters" TEST="$h_clv_test
+   h_parameters=$h_parameters" DATABASE="$h_clv_database_name
+   h_parameters=$h_parameters" II_SYSTEM="$h_clv_ii_system
+
+   h_parameters=$h_parameters" WARNING_VALUE="$h_clv_warning_value
+   h_parameters=$h_parameters" CRITICAL_VALUE="$h_clv_critical_value
+
+   return 0
+
+#----------------------------------------------------------------------------
+# End of Function: CHECK_LOG_FILE_SIZE
+#----------------------------------------------------------------------------
+}
+
+
+
+
+
+
+#----------------------------------------------------------------------------
+# Function:
+#   CHECK_SMARTCTL_DISKS
+#----------------------------------------------------------------------------
+CHECK_SMARTCTL_DISKS()
+{
+
+   CLF_MESSAGELOG Function: CHECK_SMARTCTL_DISKS
+
+#----------------------------------------------------------------------------
+# TBC: Extend to determine whether smartd is installed/running
+#----------------------------------------------------------------------------
+
+#----------------------------------------------------------------------------
+# Get a list of devices
+#----------------------------------------------------------------------------
+   $h_mqi_prog_path/mqi -v -p v -s $h_clv_ii_system -allx sudo cat /proc/partitions 1>$h_clf_sql_log
+
+   h_node_idx=0
+   h_node_device_idx=0
+
+   while read h_node_line
+   do
+
+      if [ -z "$h_node_line" ]
+      then
+         continue
+      fi
+
+      set $h_node_line
+
+      case $1 in
+
+      "Local")
+         (( h_node_idx += 1 ))
+
+         h_node_locn="L"
+         h_node_ip=$3
+
+         continue;;
+
+      "Remote")
+         (( h_node_idx += 1 ))
+
+         h_node_locn="R"
+         h_node_ip=$3
+
+         continue;;
+
+#----------------------------------------------------------------------------
+# Ignore "major" ("minor" "#blocks" "name") header output 
+#----------------------------------------------------------------------------
+     "major")
+         continue;;
+
+      esac
+
+      h_device_name=$4
+
+#----------------------------------------------------------------------------
+# Ignore device partitions (i.e. those ending in a number e.g. sda1, sda2) 
+# as we only want the device (e.g. sda)
+#----------------------------------------------------------------------------
+      case $h_device_name in
+
+      *[0-9])
+         continue;;
+
+      *)
+         (( h_node_device_idx += 1 )) 
+
+         ha_node_locn[$h_node_device_idx]=$h_node_locn
+         ha_node_ip[$h_node_device_idx]=$h_node_ip
+         ha_device_name[$h_node_device_idx]=$h_device_name
+         ;;
+
+      esac
+
+   done < $h_clf_sql_log
+
+   h_noof_nodes=$h_node_idx
+   h_noof_node_disks=$h_node_device_idx
+
+   h_noof_disks_warn=0
+   h_noof_disks_crit=0
+   h_noof_disks_ok=0
+
+   h_node_device_idx=0
+
+   h_pc="%"
+
+   printf "%s\n" "" >> $h_clf_multi_line_status
+
+   while [ $h_node_device_idx -lt $h_noof_node_disks ]
+   do
+
+      (( h_node_device_idx += 1 )) 
+
+      h_node_locn=${ha_node_locn[$h_node_device_idx]}
+      h_node_ip=${ha_node_ip[$h_node_device_idx]}
+      h_device_name=${ha_device_name[$h_node_device_idx]}
+
+
+#----------------------------------------------------------------------------
+# Get a smartctl details for each device (one at a time unfortunately)
+#----------------------------------------------------------------------------
+      $h_mqi_prog_path/mqi -v -s $h_clv_ii_system -p v -a $h_node_ip -allx sudo /usr/sbin/smartctl -H /dev/$h_device_name | grep ^SMART 1>$h_clf_sql_log
+
+
+#----------------------------------------------------------------------------
+# SMARTCTL appears to report different output (based on the disks it is
+# moniroting.
+#
+# Known output looks like:
+#   SMART overall-health self-assessment test result: PASSED
+#   SMART Health Status: OK
+#
+# So we are currently pulling out the last word on the line as our status
+#----------------------------------------------------------------------------
+      h_smartctl_op=`cat $h_clf_sql_log`
+
+   
+      if [ -z "$h_smartctl_op" ]
+      then
+
+            (( h_noof_disks_warn += 1 ))
+
+            printf "%s\n" "WARNING: $h_node_ip /dev/$h_device_name Unknown Status - no output" >> $h_clf_multi_line_status
+
+            continue
+
+      fi
+
+      set $h_smartctl_op
+
+      eval h_smartctl_status=\${$#}
+
+      h_last_word_idx=$#
+
+      h_shift_idx=1
+
+      while [ $h_shift_idx -lt $h_last_word_idx ]
+      do
+         (( h_shift_idx += 1 ))
+         shift
+      done
+
+      h_smartctl_status=$1
+
+      if [ -z "$h_smartctl_status" ]
+      then
+
+            (( h_noof_disks_warn += 1 ))
+
+            printf "%s\n" "WARNING: $h_node_ip /dev/$h_device_name Unknown Status - no output at position $h_last_word_idx" >> $h_clf_multi_line_status
+
+            continue
+
+      fi
+
+      case "$h_smartctl_status" in
+
+      "OK"|"PASSED")
+
+            (( h_noof_disks_ok += 1 ))
+
+            printf "%s\n" "OK: $h_node_ip /dev/$h_device_name" >> $h_clf_multi_line_status
+
+            ;;
+
+      *)
+
+            (( h_noof_disks_warn += 1 ))
+
+            printf "%s\n" "WARNING: $h_node_ip /dev/$h_device_name $h_smartctl_status" >> $h_clf_multi_line_status
+
+            ;;
+
+      esac
+
+   done
+
+   printf "%s\n" "" >> $h_clf_multi_line_status
+
+#----------------------------------------------------------------------------
+# Build up the standard nagios message
+#----------------------------------------------------------------------------
+   h_std_nagios_message=""
+
+   if [ $h_noof_disks_ok -gt 0 ]
+   then 
+      h_std_nagios_message_ok="Disks OK: "$h_noof_disks_ok" "
+   else
+      h_std_nagios_message_ok=""
+   fi
+
+   if [ $h_noof_disks_warn -gt 0 ]
+   then 
+      h_std_nagios_message_warn="Disks Warning: "$h_noof_disks_warn" "
+   else
+      h_std_nagios_message_warn=""
+   fi
+
+   if [ $h_noof_disks_crit -gt 0 ]
+   then 
+      h_std_nagios_message_crit="Disks Critical: "$h_noof_disks_crit" "
+   else
+      h_std_nagios_message_crit=""
+   fi
+
+   h_std_nagios_message=$h_std_nagios_message$h_std_nagios_message_ok$h_std_nagios_message_warn$h_std_nagios_message_crit
+
+
+#----------------------------------------------------------------------------
+# Build up the performance data section
+#----------------------------------------------------------------------------
+   h_performance_data="|smartctl_disks: "
+
+   h_performance_data=$h_performance_data"disk_ok="$h_noof_disks_ok" disk_warn="$h_noof_disks_warn" disk_crit="$h_noof_disks_crit
+
+#----------------------------------------------------------------------------
+# Have we broken either warning or critical thresholds
+#----------------------------------------------------------------------------
+   if [ $h_noof_disks_warn -gt 0 ]
+   then
+      h_warning_issued="Y"
+   fi
+
+   if [ $h_noof_disks_crit -gt 0 ]
+   then
+      h_critical_issued="Y"
+   fi
+
+#----------------------------------------------------------------------------
+# Add PARAMETERS: to end of performance data
+#----------------------------------------------------------------------------
+   h_parameters="PARAMETERS:"
+
+   h_parameters=$h_parameters" TEST="$h_clv_test
+
+#   h_parameters=$h_parameters" WARNING_PERCENT="$h_clv_warning_percent
+#   h_parameters=$h_parameters" CRITICAL_PERCENT="$h_clv_critical_percent
+
+   return 0
+
+#----------------------------------------------------------------------------
+# End of Function: CHECK_SMARTCTL_DISKS
+#----------------------------------------------------------------------------
+}
+
+
+
+#----------------------------------------------------------------------------
+# Function:
+#   CHECK_LINK_ERRORS
+#----------------------------------------------------------------------------
+CHECK_LINK_ERRORS()
+{
+
+   CLF_MESSAGELOG Function: CHECK_LINK_ERRORS
+
+#----------------------------------------------------------------------------
+# Run ifconfig on each of the nodes
+#----------------------------------------------------------------------------
+   $h_mqi_prog_path/mqi -v -p v  -s $h_clv_ii_system -allx sudo ifconfig | grep -P '^\w+|\s+errors\:[0-9]|\s+collisions\:[0-9]'  >$h_clf_sql_log
+
+
+
+# Remote Node: 172.16.68.7
+#eth2      Link encap:Ethernet  HWaddr B8:CA:3A:68:B4:38
+#          RX packets:847273 errors:0 dropped:0 overruns:0 frame:0
+#          TX packets:1092903 errors:0 dropped:0 overruns:0 carrier:0
+#          collisions:0 txqueuelen:1000
+#lo        Link encap:Local Loopback
+#          RX packets:11758 errors:0 dropped:0 overruns:0 frame:0
+#          TX packets:11758 errors:0 dropped:0 overruns:0 carrier:0
+#          collisions:0 txqueuelen:0
+
+   h_node_idx=0
+   h_nic_idx=0
+
+   while read h_node_line
+   do
+
+      if [ -z "$h_node_line" ]
+      then
+         continue
+      fi
+
+      set $h_node_line
+
+      case $1 in
+
+      "Local")
+         (( h_node_idx += 1 ))
+
+         h_node_locn="L"
+         h_node_ip=$3
+
+         continue;;
+
+      "Remote")
+         (( h_node_idx += 1 ))
+
+         h_node_locn="R"
+         h_node_ip=$3
+
+         continue;;
+
+      esac
+
+#----------------------------------------------------------------------------
+# If the current line has the work Link on it, we have found a NIC card
+#----------------------------------------------------------------------------
+      case $2 in
+
+      "Link")
+         (( h_nic_idx += 1 ))
+
+         ha_node_ip[$h_nic_idx]=$h_node_ip
+         ha_nic[$h_nic_idx]=$1
+
+         continue;;
+
+      esac
+
+#----------------------------------------------------------------------------
+# Capture number of packets transmitted/received and the number of errors
+# encountered
+#----------------------------------------------------------------------------
+      case $1 in
+
+      "TX")
+
+         ha_tx_packets[$h_nic_idx]=`echo $2 | awk -F":" '{print $2}'`
+         ha_tx_errors[$h_nic_idx]=`echo $3 | awk -F":" '{print $2}'`
+
+         continue;;
+
+      "RX")
+
+         ha_rx_packets[$h_nic_idx]=`echo $2 | awk -F":" '{print $2}'`
+         ha_rx_errors[$h_nic_idx]=`echo $3 | awk -F":" '{print $2}'`
+
+         continue;;
+
+      esac
+
+#----------------------------------------------------------------------------
+# Finally check if there were any collisions recorded
+#----------------------------------------------------------------------------
+      h_collisions_found=`echo $1 | awk -F":" '{print $1}' | wc -l`
+
+      case $h_collisions_found in
+
+      1)
+         ha_collisions[$h_nic_idx]=`echo $1 | awk -F":" '{print $2}'`
+
+         continue;;
+
+      esac
+
+   done < $h_clf_sql_log
+
+   h_noof_nodes=$h_node_idx
+   h_noof_nics=$h_nic_idx
+
+#----------------------------------------------------------------------------
+# Now weve gone through all the output, prepare the data for returning
+# to EMA
+#----------------------------------------------------------------------------
+
+   h_noof_nic_warn=0
+   h_noof_nic_crit=0
+   h_noof_nic_ok=0
+
+   h_nic_idx=0
+
+   h_pc="%"
+
+   while [ $h_nic_idx -lt $h_noof_nics ]
+   do
+
+      (( h_nic_idx += 1 )) 
+
+      h_node_ip=${ha_node_ip[$h_nic_idx]}
+      h_nic=${ha_nic[$h_nic_idx]}
+      h_tx_packets=${ha_tx_packets[$h_nic_idx]}
+      h_tx_errors=${ha_tx_errors[$h_nic_idx]}
+      h_rx_packets=${ha_rx_packets[$h_nic_idx]}
+      h_rx_errors=${ha_rx_errors[$h_nic_idx]}
+      h_collisions=${ha_collisions[$h_nic_idx]}
+
+      if [ -z "$h_tx_packets" ]
+      then
+        continue
+      fi
+
+      case $h_tx_packets in
+      0) h_tx_error_pc=0 ;;
+      *) h_tx_error_pc=$( echo "scale=0; $h_tx_errors / $h_tx_packets * 100" | bc ) ;;
+      esac
+  
+      case $h_rx_packets in
+      0) h_rx_error_pc=0;;
+      *) h_rx_error_pc=$( echo "scale=0; $h_rx_errors / $h_rx_packets * 100" | bc ) ;;
+      esac
+ 
+
+      if [ $h_tx_error_pc -ge $h_clv_critical_percent -o $h_rx_error_pc -ge $h_clv_critical_percent -o $h_collisions -gt 0 ]
+      then
+         (( h_noof_nic_crit += 1 ))
+
+         printf "%s\n" "CRITICAL: Node: $h_node_ip NIC: $h_nic TX Packets: $h_tx_packets  TX Errors: $h_tx_errors ($h_tx_error_pc$h_pc) RX Packets: $h_rx_packets RX Errors: $h_rx_errors ($h_rx_error_pc$h_pc) Collisions: $h_collisions" >> $h_clf_multi_line_status
+
+      else
+         if [ $h_tx_error_pc -ge $h_clv_warning_percent -o $h_rx_error_pc -ge $h_clv_warning_percent -o $h_collisions -gt 0 ]
+         then
+            (( h_noof_nic_warn += 1 ))
+
+            printf "%s\n" "WARNING: Node: $h_node_ip NIC: $h_nic TX Packets: $h_tx_packets  TX Errors: $h_tx_errors ($h_tx_error_pc$h_pc) RX Packets: $h_rx_packets RX Errors: $h_rx_errors ($h_rx_error_pc$h_pc) Collisions: $h_collisions" >> $h_clf_multi_line_status
+
+         else
+
+            (( h_noof_nic_ok += 1 ))
+
+            printf "%s\n" "OK: Node: $h_node_ip NIC: $h_nic TX Packets: $h_tx_packets  TX Errors: $h_tx_errors ($h_tx_error_pc$h_pc) RX Packets: $h_rx_packets RX Errors: $h_rx_errors ($h_rx_error_pc$h_pc) Collisions: $h_collisions" >> $h_clf_multi_line_status
+         fi
+      fi
+
+   done
+
+#----------------------------------------------------------------------------
+# Build up the standard nagios message
+#----------------------------------------------------------------------------
+   h_std_nagios_message=""
+
+   if [ $h_noof_nic_ok -gt 0 ]
+   then 
+      h_std_nagios_message_ok="Links OK: "$h_noof_nic_ok" "
+   else
+      h_std_nagios_message_ok=""
+   fi
+
+   if [ $h_noof_nic_warn -gt 0 ]
+   then 
+      h_std_nagios_message_warn="Links Warning: "$h_noof_nic_warn" "
+   else
+      h_std_nagios_message_warn=""
+   fi
+
+   if [ $h_noof_nic_crit -gt 0 ]
+   then 
+      h_std_nagios_message_crit="Links Critical: "$h_noof_nic_crit" "
+   else
+      h_std_nagios_message_crit=""
+   fi
+
+   h_std_nagios_message=$h_std_nagios_message$h_std_nagios_message_ok$h_std_nagios_message_warn$h_std_nagios_message_crit
+
+
+#----------------------------------------------------------------------------
+# Build up the performance data section
+#----------------------------------------------------------------------------
+   h_performance_data="|link_status: "
+
+   h_performance_data=$h_performance_data"nic_ok="$h_noof_nic_ok" nic_warn="$h_noof_nic_warn" nic_crit="$h_noof_nic_crit
+
+#----------------------------------------------------------------------------
+# Have we broken either warning or critical thresholds
+#----------------------------------------------------------------------------
+   if [ $h_noof_nic_warn -gt 0 ]
+   then
+      h_warning_issued="Y"
+   fi
+
+   if [ $h_noof_nic_crit -gt 0 ]
+   then
+      h_critical_issued="Y"
+   fi
+
+#----------------------------------------------------------------------------
+# Add PARAMETERS: to end of performance data
+#----------------------------------------------------------------------------
+   h_parameters="PARAMETERS:"
+
+   h_parameters=$h_parameters" TEST="$h_clv_test
+
+   h_parameters=$h_parameters" WARNING_PERCENT="$h_clv_warning_percent
+   h_parameters=$h_parameters" CRITICAL_PERCENT="$h_clv_critical_percent
+
+   return 0
+
+#----------------------------------------------------------------------------
+# End of Function: CHECK_LINK_ERRORS
+#----------------------------------------------------------------------------
+}
+
+
+
+
+
+
+#----------------------------------------------------------------------------
+# Function:
+#   CHECK_SWAP_USAGE
+#----------------------------------------------------------------------------
+CHECK_SWAP_USAGE()
+{
+
+   CLF_MESSAGELOG Function: CHECK_SWAP_USAGE
+
+#----------------------------------------------------------------------------
+# Run free on each of the nodes
+#----------------------------------------------------------------------------
+   $h_mqi_prog_path/mqi -v -p v -s $h_clv_ii_system  -allx sudo free -g  >$h_clf_sql_log
+
+#Local Node: 172.16.68.1
+#             total       used       free     shared    buffers     cached
+#Mem:            47          7         39          0          0          5
+#-/+ buffers/cache:          1         45
+#Swap:           45          0         45
+#
+#Remote Node: 172.16.68.2
+#             total       used       free     shared    buffers     cached
+#Mem:           188        188          0          0          0         15
+#-/+ buffers/cache:        172         16
+#Swap:          181          1        179
+
+
+   h_node_idx=0
+
+   while read h_op_f01 h_op_f02 h_op_f03 h_op_f04 h_op_f05 h_op_f06 h_op_f07
+   do
+
+      if [ -z "$h_op_f01" ]
+      then
+         continue
+      fi
+
+      case $h_op_f01 in
+
+      "Local")
+         (( h_node_idx += 1 ))
+
+         h_node_locn="L"
+         h_node_ip=$h_op_f03
+
+         continue;;
+
+      "Remote")
+         (( h_node_idx += 1 ))
+
+         h_node_locn="R"
+         h_node_ip=$h_op_f03
+
+         continue;;
+
+      esac
+
+#----------------------------------------------------------------------------
+# Capture the SWAP values
+#----------------------------------------------------------------------------
+      case $h_op_f01 in
+
+      "Swap:")
+
+         ha_node_ip[$h_node_idx]=$h_node_ip
+         ha_node_locn[$h_node_idx]=$h_node_locn
+         ha_swap_total[$h_node_idx]=$h_op_f02
+         ha_swap_used[$h_node_idx]=$h_op_f03
+         ha_swap_free[$h_node_idx]=$h_op_f04
+
+         continue;;
+
+      esac
+
+      continue
+
+
+   done < $h_clf_sql_log
+
+   h_noof_nodes=$h_node_idx
+
+#----------------------------------------------------------------------------
+# Now weve gone through all the output, prepare the data for returning
+# to EMA
+#----------------------------------------------------------------------------
+
+   h_noof_swap_warn=0
+   h_noof_swap_crit=0
+   h_noof_swap_ok=0
+
+   h_node_idx=0
+
+   h_pc="%"
+
+   while [ $h_node_idx -lt $h_noof_nodes ]
+   do
+
+      (( h_node_idx += 1 )) 
+
+      h_node_ip=${ha_node_ip[$h_node_idx]}
+      h_node_locn=${ha_node_locn[$h_node_idx]}
+      h_swap_total=${ha_swap_total[$h_node_idx]}
+      h_swap_used=${ha_swap_used[$h_node_idx]}
+      h_swap_free=${ha_swap_free[$h_node_idx]}
+
+      case $h_swap_total in
+      0) h_swap_total_pc=0 ;;
+      *) h_swap_total_pc=$( echo "scale=0; $h_swap_used / $h_swap_total * 100" | bc ) ;;
+      esac
+  
+
+      if [ $h_swap_total_pc -ge $h_clv_critical_percent ]
+      then
+         (( h_noof_swap_crit += 1 ))
+
+         printf "%s\n" "CRITICAL: Node: $h_node_ip SWAP(GB) Total: $h_swap_total Used: $h_swap_used ($h_swap_total_pc$h_pc) Free: $h_swap_free" >> $h_clf_multi_line_status
+
+      else
+         if [ $h_swap_total_pc -ge $h_clv_warning_percent ]
+         then
+            (( h_noof_swap_warn += 1 ))
+
+            printf "%s\n" "WARNING: Node: $h_node_ip SWAP(GB) Total: $h_swap_total Used: $h_swap_used ($h_swap_total_pc$h_pc) Free: $h_swap_free" >> $h_clf_multi_line_status
+
+         else
+
+            (( h_noof_swap_ok += 1 ))
+
+            printf "%s\n" "OK: Node: $h_node_ip SWAP(GB) Total: $h_swap_total Used: $h_swap_used ($h_swap_total_pc$h_pc) Free: $h_swap_free" >> $h_clf_multi_line_status
+         fi
+      fi
+
+   done
+
+#----------------------------------------------------------------------------
+# Build up the standard nagios message
+#----------------------------------------------------------------------------
+   h_std_nagios_message=""
+
+   if [ $h_noof_swap_ok -gt 0 ]
+   then 
+      h_std_nagios_message_ok="SWAP OK: "$h_noof_swap_ok" "
+   else
+      h_std_nagios_message_ok=""
+   fi
+
+   if [ $h_noof_swap_warn -gt 0 ]
+   then 
+      h_std_nagios_message_warn="SWAP Warning: "$h_noof_swap_warn" "
+   else
+      h_std_nagios_message_warn=""
+   fi
+
+   if [ $h_noof_swap_crit -gt 0 ]
+   then 
+      h_std_nagios_message_crit="SWAP Critical: "$h_noof_swap_crit" "
+   else
+      h_std_nagios_message_crit=""
+   fi
+
+   h_std_nagios_message=$h_std_nagios_message$h_std_nagios_message_ok$h_std_nagios_message_warn$h_std_nagios_message_crit
+
+
+#----------------------------------------------------------------------------
+# Build up the performance data section
+#----------------------------------------------------------------------------
+   h_performance_data="|swap_usage: "
+
+   h_performance_data=$h_performance_data"swap_ok="$h_noof_swap_ok" swap_warn="$h_noof_swap_warn" swap_crit="$h_noof_swap_crit
+
+#----------------------------------------------------------------------------
+# Have we broken either warning or critical thresholds
+#----------------------------------------------------------------------------
+   if [ $h_noof_swap_warn -gt 0 ]
+   then
+      h_warning_issued="Y"
+   fi
+
+   if [ $h_noof_swap_crit -gt 0 ]
+   then
+      h_critical_issued="Y"
+   fi
+
+#----------------------------------------------------------------------------
+# Add PARAMETERS: to end of performance data
+#----------------------------------------------------------------------------
+   h_parameters="PARAMETERS:"
+
+   h_parameters=$h_parameters" TEST="$h_clv_test
+
+   h_parameters=$h_parameters" WARNING_PERCENT="$h_clv_warning_percent
+   h_parameters=$h_parameters" CRITICAL_PERCENT="$h_clv_critical_percent
+
+   return 0
+
+#----------------------------------------------------------------------------
+# End of Function: CHECK_SWAP_USAGE
+#----------------------------------------------------------------------------
+}
+
+
+
+#----------------------------------------------------------------------------
+# Function:
+#   CHECK_HARD_FD_ULIMIT
+#----------------------------------------------------------------------------
+CHECK_HARD_FD_ULIMIT()
+{
+
+   CLF_MESSAGELOG Function: CHECK_HARD_FD_ULIMIT
+
+#----------------------------------------------------------------------------
+# Run ulimit -Hn on each of the nodes
+#----------------------------------------------------------------------------
+   $h_mqi_prog_path/mqi -v -p V -s $h_clv_ii_system -allx ulimit -Hn  >$h_clf_sql_log
+
+#Local Node: 172.16.68.5
+#65000
+#
+#Remote Node: 172.16.68.3
+#65000
+
+
+   h_node_idx=0
+
+   while read h_op_f01 h_op_f02 h_op_f03
+   do
+
+      if [ -z "$h_op_f01" ]
+      then
+         continue
+      fi
+
+      case $h_op_f01 in
+
+      "Local")
+         (( h_node_idx += 1 ))
+
+         h_node_locn="L"
+         h_node_ip=$h_op_f03
+
+         continue;;
+
+      "Remote")
+         (( h_node_idx += 1 ))
+
+         h_node_locn="R"
+         h_node_ip=$h_op_f03
+
+         continue;;
+
+      esac
+
+#----------------------------------------------------------------------------
+# Capture the single ulimit value
+#----------------------------------------------------------------------------
+      ha_node_ip[$h_node_idx]=$h_node_ip
+      ha_node_locn[$h_node_idx]=$h_node_locn
+      ha_ulimit_value[$h_node_idx]=$h_op_f01
+
+   done < $h_clf_sql_log
+
+   h_noof_nodes=$h_node_idx
+
+#----------------------------------------------------------------------------
+# Now weve gone through all the output, prepare the data for returning
+# to EMA
+#----------------------------------------------------------------------------
+
+   h_noof_warn=0
+   h_noof_crit=0
+   h_noof_ok=0
+
+   h_node_idx=0
+
+   while [ $h_node_idx -lt $h_noof_nodes ]
+   do
+
+      (( h_node_idx += 1 )) 
+
+      h_node_ip=${ha_node_ip[$h_node_idx]}
+      h_node_locn=${ha_node_locn[$h_node_idx]}
+      h_ulimit_value=${ha_ulimit_value[$h_node_idx]}
+
+      if [ $h_ulimit_value -lt $h_clv_critical_value ]
+      then
+         (( h_noof_crit += 1 ))
+
+         printf "%s\n" "CRITICAL: Node: $h_node_ip Hard File Descriptor Limit: $h_ulimit_value is less than the required value of $h_clv_critical_value" >> $h_clf_multi_line_status
+
+      else
+         if [ $h_ulimit_value -lt $h_clv_warning_value ]
+         then
+            (( h_noof_warn += 1 ))
+
+            printf "%s\n" "WARNING: Node: $h_node_ip Hard File Descriptor Limit: $h_ulimit_value is less than the required value of $h_clv_warning_value" >> $h_clf_multi_line_status
+
+         else
+
+            (( h_noof_ok += 1 ))
+
+            printf "%s\n" "OK: Node: $h_node_ip Hard File Descriptor Limit: $h_ulimit_value is fine (required value of $h_clv_critical_value)" >> $h_clf_multi_line_status
+         fi
+      fi
+
+   done
+
+#----------------------------------------------------------------------------
+# Build up the standard nagios message
+#----------------------------------------------------------------------------
+   h_std_nagios_message=""
+
+   if [ $h_noof_ok -gt 0 ]
+   then 
+      h_std_nagios_message_ok="Hard File Descriptor ULIMIT OK: "$h_noof_ok" "
+   else
+      h_std_nagios_message_ok=""
+   fi
+
+   if [ $h_noof_warn -gt 0 ]
+   then 
+      h_std_nagios_message_warn="Hard File Descriptor ULIMIT Warning: "$h_noof_warn" "
+   else
+      h_std_nagios_message_warn=""
+   fi
+
+   if [ $h_noof_crit -gt 0 ]
+   then 
+      h_std_nagios_message_crit="Hard File Descriptor ULIMIT Critical: "$h_noof_crit" "
+   else
+      h_std_nagios_message_crit=""
+   fi
+
+   h_std_nagios_message=$h_std_nagios_message$h_std_nagios_message_ok$h_std_nagios_message_warn$h_std_nagios_message_crit
+
+
+#----------------------------------------------------------------------------
+# Build up the performance data section
+#----------------------------------------------------------------------------
+   h_performance_data="|hard_fd_ulimit: "
+
+   h_performance_data=$h_performance_data"fd_ulimit_ok="$h_noof_ok" fd_ulimit_warn="$h_noof_warn" fd_ulimit_crit="$h_noof_crit
+
+#----------------------------------------------------------------------------
+# Have we broken either warning or critical thresholds
+#----------------------------------------------------------------------------
+   if [ $h_noof_warn -gt 0 ]
+   then
+      h_warning_issued="Y"
+   fi
+
+   if [ $h_noof_crit -gt 0 ]
+   then
+      h_critical_issued="Y"
+   fi
+
+#----------------------------------------------------------------------------
+# Add PARAMETERS: to end of performance data
+#----------------------------------------------------------------------------
+   h_parameters="PARAMETERS:"
+
+   h_parameters=$h_parameters" TEST="$h_clv_test
+
+   h_parameters=$h_parameters" WARNING_VALUE="$h_clv_warning_value
+   h_parameters=$h_parameters" CRITICAL_VALUE="$h_clv_critical_value
+
+   return 0
+
+#----------------------------------------------------------------------------
+# End of Function: CHECK_HARD_FD_ULIMIT
+#----------------------------------------------------------------------------
+}
+
+
+
+#----------------------------------------------------------------------------
+# Function:
+#   CHECK_SOFT_FD_ULIMIT
+#----------------------------------------------------------------------------
+CHECK_SOFT_FD_ULIMIT()
+{
+
+   CLF_MESSAGELOG Function: CHECK_SOFT_FD_ULIMIT
+
+#----------------------------------------------------------------------------
+# Run ulimit -Sn on each of the nodes
+#----------------------------------------------------------------------------
+   $h_mqi_prog_path/mqi -v -p V -s $h_clv_ii_system -allx ulimit -Sn  >$h_clf_sql_log
+
+#Local Node: 172.16.68.5
+#65000
+#
+#Remote Node: 172.16.68.3
+#65000
+
+
+   h_node_idx=0
+
+   while read h_op_f01 h_op_f02 h_op_f03
+   do
+
+      if [ -z "$h_op_f01" ]
+      then
+         continue
+      fi
+
+      case $h_op_f01 in
+
+      "Local")
+         (( h_node_idx += 1 ))
+
+         h_node_locn="L"
+         h_node_ip=$h_op_f03
+
+         continue;;
+
+      "Remote")
+         (( h_node_idx += 1 ))
+
+         h_node_locn="R"
+         h_node_ip=$h_op_f03
+
+         continue;;
+
+      esac
+
+#----------------------------------------------------------------------------
+# Capture the single ulimit value
+#----------------------------------------------------------------------------
+      ha_node_ip[$h_node_idx]=$h_node_ip
+      ha_node_locn[$h_node_idx]=$h_node_locn
+      ha_ulimit_value[$h_node_idx]=$h_op_f01
+
+   done < $h_clf_sql_log
+
+   h_noof_nodes=$h_node_idx
+
+#----------------------------------------------------------------------------
+# Now weve gone through all the output, prepare the data for returning
+# to EMA
+#----------------------------------------------------------------------------
+
+   h_noof_warn=0
+   h_noof_crit=0
+   h_noof_ok=0
+
+   h_node_idx=0
+
+   while [ $h_node_idx -lt $h_noof_nodes ]
+   do
+
+      (( h_node_idx += 1 )) 
+
+      h_node_ip=${ha_node_ip[$h_node_idx]}
+      h_node_locn=${ha_node_locn[$h_node_idx]}
+      h_ulimit_value=${ha_ulimit_value[$h_node_idx]}
+
+      if [ $h_ulimit_value -lt $h_clv_critical_value ]
+      then
+         (( h_noof_crit += 1 ))
+
+         printf "%s\n" "CRITICAL: Node: $h_node_ip Soft File Descriptor Limit: $h_ulimit_value is less than the required value of $h_clv_critical_value" >> $h_clf_multi_line_status
+
+      else
+         if [ $h_ulimit_value -lt $h_clv_warning_value ]
+         then
+            (( h_noof_warn += 1 ))
+
+            printf "%s\n" "WARNING: Node: $h_node_ip Soft File Descriptor Limit: $h_ulimit_value is less than the required value of $h_clv_warning_value" >> $h_clf_multi_line_status
+
+         else
+
+            (( h_noof_ok += 1 ))
+
+            printf "%s\n" "OK: Node: $h_node_ip Soft File Descriptor Limit: $h_ulimit_value is fine (required value of $h_clv_critical_value)" >> $h_clf_multi_line_status
+         fi
+      fi
+
+   done
+
+#----------------------------------------------------------------------------
+# Build up the standard nagios message
+#----------------------------------------------------------------------------
+   h_std_nagios_message=""
+
+   if [ $h_noof_ok -gt 0 ]
+   then 
+      h_std_nagios_message_ok="Soft File Descriptor ULIMIT OK: "$h_noof_ok" "
+   else
+      h_std_nagios_message_ok=""
+   fi
+
+   if [ $h_noof_warn -gt 0 ]
+   then 
+      h_std_nagios_message_warn="Soft File Descriptor ULIMIT Warning: "$h_noof_warn" "
+   else
+      h_std_nagios_message_warn=""
+   fi
+
+   if [ $h_noof_crit -gt 0 ]
+   then 
+      h_std_nagios_message_crit="Soft File Descriptor ULIMIT Critical: "$h_noof_crit" "
+   else
+      h_std_nagios_message_crit=""
+   fi
+
+   h_std_nagios_message=$h_std_nagios_message$h_std_nagios_message_ok$h_std_nagios_message_warn$h_std_nagios_message_crit
+
+
+#----------------------------------------------------------------------------
+# Build up the performance data section
+#----------------------------------------------------------------------------
+   h_performance_data="|hard_fd_ulimit: "
+
+   h_performance_data=$h_performance_data"fd_ulimit_ok="$h_noof_ok" fd_ulimit_warn="$h_noof_warn" fd_ulimit_crit="$h_noof_crit
+
+#----------------------------------------------------------------------------
+# Have we broken either warning or critical thresholds
+#----------------------------------------------------------------------------
+   if [ $h_noof_warn -gt 0 ]
+   then
+      h_warning_issued="Y"
+   fi
+
+   if [ $h_noof_crit -gt 0 ]
+   then
+      h_critical_issued="Y"
+   fi
+
+#----------------------------------------------------------------------------
+# Add PARAMETERS: to end of performance data
+#----------------------------------------------------------------------------
+   h_parameters="PARAMETERS:"
+
+   h_parameters=$h_parameters" TEST="$h_clv_test
+
+   h_parameters=$h_parameters" WARNING_VALUE="$h_clv_warning_value
+   h_parameters=$h_parameters" CRITICAL_VALUE="$h_clv_critical_value
+
+   return 0
+
+#----------------------------------------------------------------------------
+# End of Function: CHECK_SOFT_FD_ULIMIT
+#----------------------------------------------------------------------------
+}
+
+
+
+#----------------------------------------------------------------------------
+# Function:
+#   CHECK_MAX_FILES_LIMIT
+#----------------------------------------------------------------------------
+CHECK_MAX_FILES_LIMIT()
+{
+
+   CLF_MESSAGELOG Function: CHECK_MAX_FILES_LIMIT
+
+#----------------------------------------------------------------------------
+# Run ulimit -Sn on each of the nodes
+#----------------------------------------------------------------------------
+   $h_mqi_prog_path/mqi -v -p V -s $h_clv_ii_system -allx "cat /proc/sys/fs/file-max"  >$h_clf_sql_log
+
+#Local Node: 172.16.68.5
+#19709147
+#
+#Remote Node: 172.16.68.3
+#19709147
+
+
+   h_node_idx=0
+
+   while read h_op_f01 h_op_f02 h_op_f03
+   do
+
+      if [ -z "$h_op_f01" ]
+      then
+         continue
+      fi
+
+      case $h_op_f01 in
+
+      "Local")
+         (( h_node_idx += 1 ))
+
+         h_node_locn="L"
+         h_node_ip=$h_op_f03
+
+         continue;;
+
+      "Remote")
+         (( h_node_idx += 1 ))
+
+         h_node_locn="R"
+         h_node_ip=$h_op_f03
+
+         continue;;
+
+      esac
+
+#----------------------------------------------------------------------------
+# Capture the single ulimit value
+#----------------------------------------------------------------------------
+      ha_node_ip[$h_node_idx]=$h_node_ip
+      ha_node_locn[$h_node_idx]=$h_node_locn
+      ha_max_files_limit[$h_node_idx]=$h_op_f01
+
+   done < $h_clf_sql_log
+
+   h_noof_nodes=$h_node_idx
+
+#----------------------------------------------------------------------------
+# Now weve gone through all the output, prepare the data for returning
+# to EMA
+#----------------------------------------------------------------------------
+
+   h_noof_warn=0
+   h_noof_crit=0
+   h_noof_ok=0
+
+   h_node_idx=0
+
+   while [ $h_node_idx -lt $h_noof_nodes ]
+   do
+
+      (( h_node_idx += 1 )) 
+
+      h_node_ip=${ha_node_ip[$h_node_idx]}
+      h_node_locn=${ha_node_locn[$h_node_idx]}
+      h_max_files_limit=${ha_max_files_limit[$h_node_idx]}
+
+      if [ $h_max_files_limit -lt $h_clv_critical_value ]
+      then
+         (( h_noof_crit += 1 ))
+
+         printf "%s\n" "CRITICAL: Node: $h_node_ip Max Files Limit: $h_max_files_limit is less than the required value of $h_clv_critical_value" >> $h_clf_multi_line_status
+
+      else
+         if [ $h_max_files_limit -lt $h_clv_warning_value ]
+         then
+            (( h_noof_warn += 1 ))
+
+            printf "%s\n" "WARNING: Node: $h_node_ip Max Files Limit: $h_max_files_limit is less than the required value of $h_clv_warning_value" >> $h_clf_multi_line_status
+
+         else
+
+            (( h_noof_ok += 1 ))
+
+            printf "%s\n" "OK: Node: $h_node_ip Max Files Limit: $h_max_files_limit is fine (required value of $h_clv_critical_value)" >> $h_clf_multi_line_status
+         fi
+      fi
+
+   done
+
+#----------------------------------------------------------------------------
+# Build up the standard nagios message
+#----------------------------------------------------------------------------
+   h_std_nagios_message=""
+
+   if [ $h_noof_ok -gt 0 ]
+   then 
+      h_std_nagios_message_ok="Max Files Limit OK: "$h_noof_ok" "
+   else
+      h_std_nagios_message_ok=""
+   fi
+
+   if [ $h_noof_warn -gt 0 ]
+   then 
+      h_std_nagios_message_warn="Max Files Limit Warning: "$h_noof_warn" "
+   else
+      h_std_nagios_message_warn=""
+   fi
+
+   if [ $h_noof_crit -gt 0 ]
+   then 
+      h_std_nagios_message_crit="Max Files Limit Critical: "$h_noof_crit" "
+   else
+      h_std_nagios_message_crit=""
+   fi
+
+   h_std_nagios_message=$h_std_nagios_message$h_std_nagios_message_ok$h_std_nagios_message_warn$h_std_nagios_message_crit
+
+
+#----------------------------------------------------------------------------
+# Build up the performance data section
+#----------------------------------------------------------------------------
+   h_performance_data="|max_files_limit: "
+
+   h_performance_data=$h_performance_data"max_files_limit_ok="$h_noof_ok" max_files_limit_warn="$h_noof_warn" max_files_limit_crit="$h_noof_crit
+
+#----------------------------------------------------------------------------
+# Have we broken either warning or critical thresholds
+#----------------------------------------------------------------------------
+   if [ $h_noof_warn -gt 0 ]
+   then
+      h_warning_issued="Y"
+   fi
+
+   if [ $h_noof_crit -gt 0 ]
+   then
+      h_critical_issued="Y"
+   fi
+
+#----------------------------------------------------------------------------
+# Add PARAMETERS: to end of performance data
+#----------------------------------------------------------------------------
+   h_parameters="PARAMETERS:"
+
+   h_parameters=$h_parameters" TEST="$h_clv_test
+
+   h_parameters=$h_parameters" WARNING_VALUE="$h_clv_warning_value
+   h_parameters=$h_parameters" CRITICAL_VALUE="$h_clv_critical_value
+
+   return 0
+
+#----------------------------------------------------------------------------
+# End of Function: CHECK_MAX_FILES_LIMIT
+#----------------------------------------------------------------------------
+}
+
+
+#----------------------------------------------------------------------------
+# Function:
+#   CHECK_FD_PER_PROCESS
+#----------------------------------------------------------------------------
+CHECK_FD_PER_PROCESS()
+{
+
+   CLF_MESSAGELOG Function: CHECK_MAX_FILES_LIMIT
+
+   h_this_pid=$$
+
+   echo "h_soft_fd_ulimit=\`ulimit -Sn\`                                     "         > /tmp/ema_check_vector_mqi.$h_this_pid
+   echo "h_hard_fd_ulimit=\`ulimit -Hn\`                                     "        >> /tmp/ema_check_vector_mqi.$h_this_pid
+   echo "for h_pid in \`ps -fu actian --no-headers | awk '{print \$2}'\`     "        >> /tmp/ema_check_vector_mqi.$h_this_pid
+   echo "do                                                                  "        >> /tmp/ema_check_vector_mqi.$h_this_pid
+   echo "  h_noof_fd=\`ls -l /proc/\$h_pid/fd 2>/dev/null | wc -l\`          "        >> /tmp/ema_check_vector_mqi.$h_this_pid
+   echo "  if [ -z \$h_noof_fd ] || [ \$h_noof_fd -eq 0 ]                    "        >> /tmp/ema_check_vector_mqi.$h_this_pid
+   echo "  then                                                              "        >> /tmp/ema_check_vector_mqi.$h_this_pid
+   echo "    continue                                                        "        >> /tmp/ema_check_vector_mqi.$h_this_pid
+   echo "  else                                                              "        >> /tmp/ema_check_vector_mqi.$h_this_pid
+   echo "    echo \$h_noof_fd \$h_pid \$h_soft_fd_ulimit \$h_hard_fd_ulimit  "        >> /tmp/ema_check_vector_mqi.$h_this_pid
+   echo "  fi                                                                "        >> /tmp/ema_check_vector_mqi.$h_this_pid
+   echo "done                                                                "        >> /tmp/ema_check_vector_mqi.$h_this_pid
+   echo "rm /tmp/ema_check_vector_mqi.$h_this_pid                            "        >> /tmp/ema_check_vector_mqi.$h_this_pid
+
+   chmod 755 /tmp/ema_check_vector_mqi.$h_this_pid
+
+#cat /tmp/ema_check_vector_mqi.$h_this_pid
+#exit
+
+   $h_mqi_prog_path/mqi -v -p v -s $h_clv_ii_system -cpall /tmp/ema_check_vector_mqi.$h_this_pid  > /dev/null
+   $h_mqi_prog_path/mqi -v -p v -s $h_clv_ii_system -allx "/tmp/ema_check_vector_mqi.$h_this_pid"  >$h_clf_sql_log
+
+
+   h_node_idx=0
+   h_node_proc_idx=0
+
+   while read h_node_line
+   do
+
+      if [ -z "$h_node_line" ]
+      then
+         continue
+      fi
+
+      set $h_node_line
+
+      case $1 in
+
+      "Local")
+         (( h_node_idx += 1 ))
+
+         h_node_locn="L"
+         h_node_ip=$3
+
+         continue;;
+
+      "Remote")
+         (( h_node_idx += 1 ))
+
+         h_node_locn="R"
+         h_node_ip=$3
+
+         continue;;
+
+      esac
+
+      (( h_node_proc_idx += 1 ))
+
+      ha_node_locn[$h_node_proc_idx]=$h_node_locn
+      ha_node_ip[$h_node_proc_idx]=$h_node_ip
+      ha_noof_fd[$h_node_proc_idx]=$1
+      ha_pid[$h_node_proc_idx]=$2
+      ha_soft_fd_ulimit[$h_node_proc_idx]=$3
+      ha_hard_fd_ulimit[$h_node_proc_idx]=$4
+
+   done < $h_clf_sql_log
+
+   h_noof_nodes=$h_node_idx
+   h_noof_node_procs=$h_node_proc_idx
+
+
+   h_noof_warn=0
+   h_noof_crit=0
+   h_noof_ok=0
+
+   h_node_proc_idx=0
+
+   h_pc="%"
+
+   h_last_node_ip=""
+
+   while [ $h_node_proc_idx -lt $h_noof_node_procs ]
+   do
+
+      (( h_node_proc_idx += 1 )) 
+
+      h_node_locn=${ha_node_locn[$h_node_proc_idx]}
+      h_node_ip=${ha_node_ip[$h_node_proc_idx]}
+      h_noof_fd=${ha_noof_fd[$h_node_proc_idx]}
+      h_pid=${ha_pid[$h_node_proc_idx]}
+      h_soft_fd_ulimit=${ha_soft_fd_ulimit[$h_node_proc_idx]}
+      h_hard_fd_ulimit=${ha_hard_fd_ulimit[$h_node_proc_idx]}
+
+
+      case $h_noof_fd in
+      0) h_noof_fd_pc=0 ;;
+      *) h_noof_fd_pc=$( echo "scale=0; $h_noof_fd * 100 / $h_soft_fd_ulimit" | bc ) ;;
+      esac
+
+
+
+      if [ "$h_last_node_ip" != "$h_node_ip" ]
+      then
+
+         h_last_node_ip=$h_node_ip
+
+         printf "%s\n" "" >> $h_clf_multi_line_status
+         printf "%s\n" "Node: $h_node_ip:" >> $h_clf_multi_line_status
+	 
+      fi
+
+      if [ $h_noof_fd_pc -ge $h_clv_critical_percent ]
+      then
+         (( h_noof_crit += 1 ))
+
+         printf "%s\n" "   CRITICAL: PID $h_pid currently has $h_noof_fd file descriptors $h_noof_fd_pc$h_pc (soft limit is $h_soft_fd_ulimit hard limit is $h_hard_fd_ulimit)" >> $h_clf_multi_line_status
+
+      else
+         if [ $h_noof_fd_pc -ge $h_clv_warning_percent ]
+         then
+            (( h_noof_warn += 1 ))
+   
+             printf "%s\n" "   WARNING: PID $h_pid currently has $h_noof_fd file descriptors $h_noof_fd_pc$h_pc (soft limit is $h_soft_fd_ulimit hard limit is $h_hard_fd_ulimit)" >> $h_clf_multi_line_status
+
+         else
+
+            (( h_noof_ok += 1 ))
+
+            printf "%s\n" "   OK: PID $h_pid currently has $h_noof_fd file descriptors $h_noof_fd_pc$h_pc (soft limit is $h_soft_fd_ulimit hard limit is $h_hard_fd_ulimit)" >> $h_clf_multi_line_status
+
+         fi
+      fi
+
+   done < $h_clf_sql_log
+
+   printf "%s\n" "" >> $h_clf_multi_line_status
+
+#----------------------------------------------------------------------------
+# Build up the standard nagios message
+#----------------------------------------------------------------------------
+   h_std_nagios_message=""
+
+   if [ $h_noof_ok -gt 0 ]
+   then 
+      h_std_nagios_message_ok="File Descriptor usage OK: "$h_noof_ok" "
+   else
+      h_std_nagios_message_ok=""
+   fi
+
+   if [ $h_noof_warn -gt 0 ]
+   then 
+      h_std_nagios_message_warn="File Descriptor usage Warning: "$h_noof_warn" "
+   else
+      h_std_nagios_message_warn=""
+   fi
+
+   if [ $h_noof_crit -gt 0 ]
+   then 
+      h_std_nagios_message_crit="File Descriptor usage Critical: "$h_noof_crit" "
+   else
+      h_std_nagios_message_crit=""
+   fi
+
+   h_std_nagios_message=$h_std_nagios_message$h_std_nagios_message_ok$h_std_nagios_message_warn$h_std_nagios_message_crit
+
+
+#----------------------------------------------------------------------------
+# Build up the performance data section
+#----------------------------------------------------------------------------
+   h_performance_data="|process_fd_usage: "
+
+   h_performance_data=$h_performance_data"fd_ok="$h_noof_ok" fd_warn="$h_noof_warn" fd_crit="$h_noof_crit
+
+#----------------------------------------------------------------------------
+# Have we broken either warning or critical thresholds
+#----------------------------------------------------------------------------
+   if [ $h_noof_warn -gt 0 ]
+   then
+      h_warning_issued="Y"
+   fi
+
+   if [ $h_noof_crit -gt 0 ]
+   then
+      h_critical_issued="Y"
+   fi
+
+#----------------------------------------------------------------------------
+# Add PARAMETERS: to end of performance data
+#----------------------------------------------------------------------------
+   h_parameters="PARAMETERS:"
+
+   h_parameters=$h_parameters" TEST="$h_clv_test
+
+   h_parameters=$h_parameters" WARNING_PERCENT="$h_clv_warning_percent
+   h_parameters=$h_parameters" CRITICAL_PERCENT="$h_clv_critical_percent
+
+   return 0
+
+#----------------------------------------------------------------------------
+# End of Function: CHECK_FD_PER_PROCESS
+#----------------------------------------------------------------------------
+}
+
+
+#----------------------------------------------------------------------------
+# Function:
+#   CHECK_TOTAL_FD_USAGE
+#----------------------------------------------------------------------------
+CHECK_TOTAL_FD_USAGE()
+{
+
+   CLF_MESSAGELOG Function: CHECK_TOTAL_FD_USAGE
+
+   h_this_pid=$$
+
+   echo "h_total_inuse_fd=\`cat /proc/sys/fs/file-nr | awk '{print \$1}'\`   "         > /tmp/ema_check_vector_mqi.$h_this_pid
+   echo "h_file_max=\`cat /proc/sys/fs/file-max\`                            "        >> /tmp/ema_check_vector_mqi.$h_this_pid
+   echo "echo \$h_total_inuse_fd \$h_file_max                                "        >> /tmp/ema_check_vector_mqi.$h_this_pid
+   echo "rm /tmp/ema_check_vector_mqi.$h_this_pid                            "        >> /tmp/ema_check_vector_mqi.$h_this_pid
+
+   chmod 755 /tmp/ema_check_vector_mqi.$h_this_pid
+
+#cat /tmp/ema_check_vector_mqi.$h_this_pid
+#exit
+
+   $h_mqi_prog_path/mqi -v -p v -s $h_clv_ii_system -cpall /tmp/ema_check_vector_mqi.$h_this_pid  > /dev/null
+   $h_mqi_prog_path/mqi -v -p v -s $h_clv_ii_system -allx "/tmp/ema_check_vector_mqi.$h_this_pid"  >$h_clf_sql_log
+
+
+   h_node_idx=0
+   h_node_proc_idx=0
+
+   while read h_node_line
+   do
+
+      if [ -z "$h_node_line" ]
+      then
+         continue
+      fi
+
+      set $h_node_line
+
+      case $1 in
+
+      "Local")
+         (( h_node_idx += 1 ))
+
+         h_node_locn="L"
+         h_node_ip=$3
+
+         continue;;
+
+      "Remote")
+         (( h_node_idx += 1 ))
+
+         h_node_locn="R"
+         h_node_ip=$3
+
+         continue;;
+
+      esac
+
+      (( h_node_proc_idx += 1 ))
+
+      ha_node_locn[$h_node_proc_idx]=$h_node_locn
+      ha_node_ip[$h_node_proc_idx]=$h_node_ip
+      ha_total_inuse_fd[$h_node_proc_idx]=$1
+      ha_file_max[$h_node_proc_idx]=$2
+
+   done < $h_clf_sql_log
+
+   h_noof_nodes=$h_node_idx
+   h_noof_node_procs=$h_node_proc_idx
+
+
+   h_noof_warn=0
+   h_noof_crit=0
+   h_noof_ok=0
+
+   h_node_proc_idx=0
+
+   h_pc="%"
+
+   h_last_node_ip=""
+
+   while [ $h_node_proc_idx -lt $h_noof_node_procs ]
+   do
+
+      (( h_node_proc_idx += 1 )) 
+
+      h_node_locn=${ha_node_locn[$h_node_proc_idx]}
+      h_node_ip=${ha_node_ip[$h_node_proc_idx]}
+      h_total_inuse_fd=${ha_total_inuse_fd[$h_node_proc_idx]}
+      h_file_max=${ha_file_max[$h_node_proc_idx]}
+
+
+      case $h_total_inuse_fd in
+      0) h_total_inuse_fd_pc=0 ;;
+      *) h_total_inuse_fd_pc=$( echo "scale=0; $h_total_inuse_fd * 100 / $h_file_max" | bc ) ;;
+      esac
+
+
+
+      if [ "$h_last_node_ip" != "$h_node_ip" ]
+      then
+
+         h_last_node_ip=$h_node_ip
+
+         printf "%s\n" "" >> $h_clf_multi_line_status
+         printf "%s\n" "Node: $h_node_ip:" >> $h_clf_multi_line_status
+	 
+      fi
+
+      if [ $h_total_inuse_fd_pc -ge $h_clv_critical_percent ]
+      then
+         (( h_noof_crit += 1 ))
+
+         printf "%s\n" "   CRITICAL: $h_total_inuse_fd file descriptors are in use $h_total_inuse_fd_pc$h_pc (file max limit is $h_file_max)" >> $h_clf_multi_line_status
+
+      else
+         if [ $h_total_inuse_fd_pc -ge $h_clv_warning_percent ]
+         then
+            (( h_noof_warn += 1 ))
+   
+             printf "%s\n" "   WARNING: $h_total_inuse_fd file descriptors are in use $h_total_inuse_fd_pc$h_pc (file max limit is $h_file_max)" >> $h_clf_multi_line_status
+
+         else
+
+            (( h_noof_ok += 1 ))
+
+            printf "%s\n" "   OK: $h_total_inuse_fd file descriptors are in use $h_total_inuse_fd_pc$h_pc (file max limit is $h_file_max)" >> $h_clf_multi_line_status
+
+         fi
+      fi
+
+   done < $h_clf_sql_log
+
+   printf "%s\n" "" >> $h_clf_multi_line_status
+
+#----------------------------------------------------------------------------
+# Build up the standard nagios message
+#----------------------------------------------------------------------------
+   h_std_nagios_message=""
+
+   if [ $h_noof_ok -gt 0 ]
+   then 
+      h_std_nagios_message_ok="Total File Descriptor usage OK: "$h_noof_ok" "
+   else
+      h_std_nagios_message_ok=""
+   fi
+
+   if [ $h_noof_warn -gt 0 ]
+   then 
+      h_std_nagios_message_warn="Total File Descriptor usage Warning: "$h_noof_warn" "
+   else
+      h_std_nagios_message_warn=""
+   fi
+
+   if [ $h_noof_crit -gt 0 ]
+   then 
+      h_std_nagios_message_crit="Total File Descriptor usage Critical: "$h_noof_crit" "
+   else
+      h_std_nagios_message_crit=""
+   fi
+
+   h_std_nagios_message=$h_std_nagios_message$h_std_nagios_message_ok$h_std_nagios_message_warn$h_std_nagios_message_crit
+
+
+#----------------------------------------------------------------------------
+# Build up the performance data section
+#----------------------------------------------------------------------------
+   h_performance_data="|total_fd_usage: "
+
+   h_performance_data=$h_performance_data"fd_ok="$h_noof_ok" fd_warn="$h_noof_warn" fd_crit="$h_noof_crit
+
+#----------------------------------------------------------------------------
+# Have we broken either warning or critical thresholds
+#----------------------------------------------------------------------------
+   if [ $h_noof_warn -gt 0 ]
+   then
+      h_warning_issued="Y"
+   fi
+
+   if [ $h_noof_crit -gt 0 ]
+   then
+      h_critical_issued="Y"
+   fi
+
+#----------------------------------------------------------------------------
+# Add PARAMETERS: to end of performance data
+#----------------------------------------------------------------------------
+   h_parameters="PARAMETERS:"
+
+   h_parameters=$h_parameters" TEST="$h_clv_test
+
+   h_parameters=$h_parameters" WARNING_PERCENT="$h_clv_warning_percent
+   h_parameters=$h_parameters" CRITICAL_PERCENT="$h_clv_critical_percent
+
+   return 0
+
+#----------------------------------------------------------------------------
+# End of Function: CHECK_TOTAL_FD_USAGE
+#----------------------------------------------------------------------------
+}
+
+
+
+
+
+#----------------------------------------------------------------------------
+# Function:
+#   REPORT_BACK_TO_NAGIOS
+#----------------------------------------------------------------------------
+REPORT_BACK_TO_NAGIOS()
+{
+
+   CLF_MESSAGELOG Function: REPORT_BACK_TO_NAGIOS
+
+   h_return_status=$1
+
+   CLF_CURDATETIME
+   h_prog_end_datetime=$h_clf_cur_datetime
+
+   h_std_nagios_message=$h_std_nagios_message" (MQI)"
+
+   h_full_nagios_message=$h_std_nagios_message$h_performance_data" "$h_parameters
+
+   if [ $h_critical_issued = "Y" ]
+   then
+      return $h_clf_nagios_state_critical
+   fi
+
+   if [ $h_warning_issued = "Y" ]
+   then
+      return $h_clf_nagios_state_warning
+   fi
+
+   return $h_clf_nagios_state_ok
+
+
+#----------------------------------------------------------------------------
+# End of Function: REPORT_BACK_TO_NAGIOS
+#----------------------------------------------------------------------------
+}
+
+
+
+
+
+#----------------------------------------------------------------------------
+#----------------------------------------------------------------------------
+#----------------------------------------------------------------------------
+#
+# END OF TESTS
+#
+#----------------------------------------------------------------------------
+#----------------------------------------------------------------------------
+#----------------------------------------------------------------------------
+
+
+
+
+#----------------------------------------------------------------------------
+# Function:
+#   print_usage - print out the usage and exit
+#----------------------------------------------------------------------------
+PRINT_USAGE()
+{
+    printf "%s\n" "Usage:"
+    printf "%s\n" "  $h_prog_name"
+
+    printf "%s\n" "   -s|--system       {II_SYSTEM}"
+    printf "%s\n" "   -d|--database     {database name}"
+    printf "%s\n" "   -t|--test"
+
+    printf "%s\n" "      1 - Mounted disk space"
+    printf "%s\n" "      2 - LOG file size"
+
+    printf "%s\n" "      6 - SMARTCTL (Dell & Cisco) disk status"
+    printf "%s\n" "      7 - Network errors"
+    printf "%s\n" "      8 - SWAP usage"
+
+    printf "%s\n" "      9 - hard ulimit file descriptors"
+    printf "%s\n" "     10 - soft ulimit file descriptors"
+    printf "%s\n" "     11 - max files limits"       
+    printf "%s\n" "     12 - per process inuse file descriptors"
+    printf "%s\n" "     13 - total inuse file descriptors"
+
+    printf "%s\n" "   -w|--warning        <WARNING (percent)>"
+    printf "%s\n" "   -c|--critical       <CRITICAL (percent)>"
+    printf "%s\n" "   -W|--WARNING        <WARNING (value)>"
+    printf "%s\n" "   -C|--CRITICAL       <CRITICAL (value)>"
+    printf "%s\n" ""
+    printf "%s\n" "   -e|--expected       <Y|N>"
+    printf "%s\n" ""
+    printf "%s\n" "  $h_prog_name --help"
+    printf "%s\n" "  $h_prog_name --version"
+
+#----------------------------------------------------------------------------
+# End of Function: PRINT_USAGE
+#----------------------------------------------------------------------------
+}
+
+#----------------------------------------------------------------------------
+# Function:
+#   PRINT_HELP - print out the help and exit
+#----------------------------------------------------------------------------
+PRINT_HELP()
+{
+    PRINT_REVISION $h_prog_name $h_prog_version
+    printf "%s\n" ""
+    PRINT_USAGE
+    printf "%s\n" ""
+    printf "%s\n" "Monitor a Vector installation"
+    printf "%s\n" ""
+
+#----------------------------------------------------------------------------
+# End of Function: PRINT_HELP
+#----------------------------------------------------------------------------
+}
+
+#----------------------------------------------------------------------------
+# Function:
+#   PRINT_REVISION - print out the programs revision number
+#----------------------------------------------------------------------------
+PRINT_REVISION()
+{
+    printf "%s\n" "Program Name...: $1"
+    printf "%s\n" "Revision.......: $2"
+    printf "%s\n" ""
+
+#----------------------------------------------------------------------------
+# End of Function: PRINT_HELP
+#----------------------------------------------------------------------------
+}
+
+#----------------------------------------------------------------------------
+# main program
+#----------------------------------------------------------------------------
+
+h_clv_test_name_lc=""
+
+#----------------------------------------------------------------------------
+# Process Command Line Variables (clv)
+#----------------------------------------------------------------------------
+
+while [ -n "$1" ]
+do
+   case "$1" in
+
+   -d|--database)
+      h_clv_database_name=$2
+      shift
+      ;;
+
+   -s|--system)
+      h_clv_ii_system=$2
+      shift
+      ;;
+
+   -u|--username|--user)
+      h_clv_user=$2
+      shift
+      ;;
+
+   -w|--warning)
+      h_clv_warning_percent=$2
+      shift
+      ;;
+
+   -c|--critical)
+      h_clv_critical_percent=$2
+      shift
+      ;;
+ 
+   -W|--WARNING)
+      h_clv_warning_value=$2
+      shift
+      ;;
+ 
+   -C|--CRITICAL)
+      h_clv_critical_value=$2
+      shift
+      ;;
+ 
+    -t|--test)
+       h_clv_test=$2
+       shift
+       ;;
+ 
+    -e|--expected)
+       h_clv_expected=$2
+       shift
+       ;;
+ 
+    -h|--help)
+       PRINT_HELP
+       exit 0
+       ;;
+ 
+    -V|--version)
+       PRINT_REVISION $h_prog_name $h_prog_version
+       exit 0
+       ;;
+
+    *)
+       printf "%s\n" "Invalid parameter: $1"
+       PRINT_USAGE
+       exit 1
+       ;;
+
+   esac
+
+   shift
+
+done
+
+
+#----------------------------------------------------------------------------
+# Which test do we want to do?
+#----------------------------------------------------------------------------
+
+if [ -z "$h_clv_test" ]
+then
+   printf "%s\n" "CRITICAL test number not supplied"
+   PRINT_USAGE
+   exit 1
+fi
+
+echo "$h_clv_test" | grep "[^0-9]" >/dev/null 2>&1
+if [ "$?" -eq "0" ]
+then
+   printf "%s\n" "CRITICAL test number must be numeric"
+   PRINT_USAGE
+   exit 1
+fi
+
+h_max_test_no=13
+
+if [ "$h_clv_test" -le 0 -o  "$h_clv_test" -gt $h_max_test_no ]
+then
+   printf "%s\n" "CRITICAL test number must be numeric and in the range 1 to $h_max_test_no"
+   PRINT_USAGE
+   exit 1
+fi
+
+
+
+
+#----------------------------------------------------------------------------
+# Validate Tests that require a warning and critical percent
+#----------------------------------------------------------------------------
+case $h_clv_test in
+
+1|7|8|12|13)
+
+#----------------------------------------------------------------------------
+# WARNING percent
+#----------------------------------------------------------------------------
+
+   if [ -z "$h_clv_warning_percent" ]
+   then
+      printf "%s\n" "WARNING percentage not supplied"
+      PRINT_USAGE
+      exit 1
+   fi
+
+   echo "$h_clv_warning_percent" | grep "[^0-9]" >/dev/null 2>&1
+   if [ "$?" -eq "0" ]
+   then
+      printf "%s\n" "WARNING percentage must be numeric and >=0 and <=100"
+      PRINT_USAGE
+      exit 1
+   fi
+
+   if [ "$h_clv_warning_percent" -lt 0 -o  "$h_clv_warning_percent" -gt 100 ]
+   then
+      printf "%s\n" "WARNING percentage must be numeric and >=0 and <=100"
+      PRINT_USAGE
+      exit 1
+   fi
+
+
+
+#----------------------------------------------------------------------------
+# CRITICAL percent
+#----------------------------------------------------------------------------
+
+   if [ -z "$h_clv_critical_percent" ]
+   then
+      printf "%s\n" "CRITICAL percentage not supplied"
+      PRINT_USAGE
+      exit 1
+   fi
+
+   echo "$h_clv_critical_percent" | grep "[^0-9]" >/dev/null 2>&1
+   if [ "$?" -eq "0" ]
+   then
+      printf "%s\n" "CRITICAL percentage must be numeric and >=0 and <=100"
+      PRINT_USAGE
+      exit 1
+   fi
+
+   if [ "$h_clv_critical_percent" -lt 0 -o  "$h_clv_critical_percent" -gt 100 ]
+   then
+      printf "%s\n" "CRITICAL percentage must be numeric and >=0 and <=100"
+      PRINT_USAGE
+      exit 1
+   fi
+
+   ;;
+
+esac
+
+
+#----------------------------------------------------------------------------
+# Validate Tests that require a warning and critical values (numeric only)
+#----------------------------------------------------------------------------
+case $h_clv_test in
+
+2|9|10|11)
+
+#----------------------------------------------------------------------------
+# WARNING value
+#----------------------------------------------------------------------------
+   case $h_clv_test in
+
+   2)
+
+      if [ -z "$h_clv_warning_value" ]
+      then
+         printf "%s\n" "WARNING value not supplied"
+         PRINT_USAGE
+         exit 1
+      fi
+   
+      echo "$h_clv_warning_value" | grep "[^0-9]" >/dev/null 2>&1
+      if [ "$?" -eq "0" ]
+      then
+         printf "%s\n" "WARNING value must be numeric"
+         PRINT_USAGE
+         exit 1
+      fi
+   
+      ;;
+
+   9|10|11)
+
+      if [ ! -z "$h_clv_critical_value" ]
+      then
+         h_clv_warning_value=$h_clv_critical_value
+      fi
+
+      ;;
+
+   esac
+
+
+#----------------------------------------------------------------------------
+# CRITICAL value
+#----------------------------------------------------------------------------
+
+   if [ -z "$h_clv_critical_value" ]
+   then
+      printf "%s\n" "CRITICAL value not supplied"
+      PRINT_USAGE
+      exit 1
+   fi
+
+   echo "$h_clv_critical_value" | grep "[^0-9]" >/dev/null 2>&1
+   if [ "$?" -eq "0" ]
+   then
+      printf "%s\n" "CRITICAL value must be numeric"
+      PRINT_USAGE
+      exit 1
+   fi
+
+   ;;
+
+esac
+
+
+#----------------------------------------------------------------------------
+# ... Optional
+#----------------------------------------------------------------------------
+
+
+case $h_clv_test in
+
+5)
+   if [ -z "$h_clv_expected" ]
+   then
+      printf "%s\n" "CRITICAL expected value not provided"
+      PRINT_USAGE
+      exit 1
+   fi
+
+   if [ "$h_clv_expected" != "Y" -a "$h_clv_expected" != "N" ]
+   then
+      printf "%s\n" "CRITICAL expected value must be Y or N"
+      PRINT_USAGE
+      exit 1
+   fi
+
+   ;;
+
+esac
+
+
+#----------------------------------------------------------------------------
+# N/A
+#----------------------------------------------------------------------------
+
+
+#----------------------------------------------------------------------------
+# OK, lets do stuff
+#----------------------------------------------------------------------------
+
+
+INITIALIZE
+
+CLF_MESSAGELOG Program Name: $h_prog_name
+CLF_MESSAGELOG
+
+CLF_CURDATETIME
+CLF_MESSAGELOG starting at $h_clf_cur_datetime
+
+
+case $h_clv_test in
+
+  1)  
+      CHECK_MOUNTED_FILE_SYSTEM_SPACE
+      h_return_status=$?
+      ;;
+
+  2)  
+      CHECK_LOG_FILE_SIZE
+      h_return_status=$?
+      ;;
+
+  6)  
+      CHECK_SMARTCTL_DISKS
+      h_return_status=$?
+      ;;
+
+  7)  
+      CHECK_LINK_ERRORS
+      h_return_status=$?
+      ;;
+
+  8)  
+      CHECK_SWAP_USAGE
+      h_return_status=$?
+      ;;
+
+  9)  
+      CHECK_HARD_FD_ULIMIT
+      h_return_status=$?
+      ;;
+
+ 10)  
+      CHECK_SOFT_FD_ULIMIT
+      h_return_status=$?
+      ;;
+
+ 11)  
+      CHECK_MAX_FILES_LIMIT
+      h_return_status=$?
+      ;;
+
+ 12)  
+      CHECK_FD_PER_PROCESS
+      h_return_status=$?
+      ;;
+
+ 13)  
+      CHECK_TOTAL_FD_USAGE
+      h_return_status=$?
+      ;;
+
+
+esac
+
+
+REPORT_BACK_TO_NAGIOS $h_return_status
+h_return_status=$?
+
+CLF_CURDATETIME
+CLF_MESSAGELOG Completed at $h_clf_cur_datetime
+
+TERMINATE $h_return_status
+
+
+#----------------------------------------------------------------------------
+# End of script
+#---------------------------------------------------------------------------
