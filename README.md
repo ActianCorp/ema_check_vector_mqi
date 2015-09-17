@@ -6,7 +6,7 @@ Usage:
    -d|--database     {database name}
    -t|--test
       1 - Mounted disk space
-      2 – LOG file size
+      2 - LOG file size
       6 - SMARTCTL (Dell & Cisco) disk status
       7 - Network errors
       8 - SWAP usage
