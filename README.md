@@ -9,7 +9,7 @@ This application was initially developed as part of Actian Services' Enterprise 
 
 Although designed to be an integral part of the EMA, where montoring and alerting are provided, along with historic performance data capture and integration with other components of EMA, this application can also be used in isolation to check the health status of a cluster on an ad-hoc basis.
 
-To support this application, a couple of other scripts are also required (mqi and ema_common_library_functions).  These are also provided within this project, and need to be present in the same directory as the ema_check_verctor_mqi application.
+To support this application, a couple of other scripts are also required (mqi and ema_common_library_functions).  These are also provided within this project, and need to be present in the same directory as the ema_check_vector_mqi application.
 
 
 ####Usage
