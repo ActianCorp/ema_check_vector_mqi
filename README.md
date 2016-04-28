@@ -1,9 +1,9 @@
 # ema_check_vector_mqi
-##Command line utility for  running a series of health-status checks across a Vector-H cluster
+##Command line utility for  running a series of health-status checks across a VectorH cluster
 ###(part of the Actian Enterprise Monitoring Application - EMA)
 
 ####Overview
-This Linux BASH script can be used to check the health status of a number of metrics in a Vector-H cluster.
+This Linux BASH script can be used to check the health status of a number of metrics in a VectorH cluster.
 
 This application was initially developed as part of Actian Services' Enterprise Monitoring Application (EMA) - a solution developed to provide monitoring and alerting of Actian's products and based on the Nagios framework.
 
@@ -65,7 +65,7 @@ This is not ideal, and may in future be changed to accept a single pair.
 
 ####Sample output
 
-The following section shows the output from executing each of the individual "tests" on one of our Vector-H 4.2.1 (Patch 16902) CentOS 6.4 clusters running Hortonworks.
+The following section shows the output from executing each of the individual "tests" on one of our VectorH 4.2.1 (Patch 16902) CentOS 6.4 clusters running Hortonworks.
 
 Note that for each of the tests, three outputs are generated.
 
