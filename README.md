@@ -1,8 +1,8 @@
 # ema_check_vector_mqi
-##Command line utility for  running a series of health-status checks across a VectorH cluster
-###(part of the Actian Enterprise Monitoring Application - EMA)
+## Command line utility for  running a series of health-status checks across a VectorH cluster
+### (part of the Actian Enterprise Monitoring Application - EMA)
 
-####Overview
+#### Overview
 This Linux BASH script can be used to check the health status of a number of metrics in a VectorH cluster.
 
 This application was initially developed as part of Actian Services' Enterprise Monitoring Application (EMA) - a solution developed to provide monitoring and alerting of Actian's products and based on the Nagios framework.
@@ -12,7 +12,7 @@ Although designed to be an integral part of the EMA, where montoring and alertin
 To support this application, a couple of other scripts are also required (mqi and ema_common_library_functions).  These are also provided within this project, and need to be present in the same directory as the ema_check_vector_mqi application.
 
 
-####Usage
+#### Usage
 ```
 ./ema_check_vector_mqi
 
@@ -40,7 +40,7 @@ Usage:
   ema_check_vector_mqi --version
 ```
 
-####Examples
+#### Examples
 
 The following list provides examples on how to invoke the ema_check_vector_mqi application. 
 
@@ -63,7 +63,7 @@ This is not ideal, and may in future be changed to accept a single pair.
 ./ema_check_vector_mqi --system /opt/Actian/VectorX1 --test 13 --warning 20 --critical 30
 ```
 
-####Sample output
+#### Sample output
 
 The following section shows the output from executing each of the individual "tests" on one of our VectorH 4.2.1 (Patch 16902) CentOS 6.4 clusters running Hortonworks.
 
@@ -89,7 +89,7 @@ The second output is a single (albeit possiblly long) line.  This give a summary
 The third (optional) component comprises of zero, one or more lines of detailed information pertaining the the test that has just been executed.
 
 
-#####Test: 1 - Mounted disk space
+##### Test: 1 - Mounted disk space
 
 ```
 File Systems OK: 95 File Systems Warning: 1  (MQI)|mounted_file_systems: file_systems_ok=95 file_systems_warn=1 file_systems_crit=0 PARAMETERS: TEST=1 WARNING_PERCENT=70 CRITICAL_PERCENT=90
@@ -137,7 +137,7 @@ Node: 172.16.68.5:
 <<< SNIP >>>
 ```
 
-#####Test: 2 - LOG file size
+##### Test: 2 - LOG file size
 
 ```
 OK: LOG file is currently 815.1 MB (MQI)|log_file_size: log_file_size=854727439 PARAMETERS: TEST=2 DATABASE= II_SYSTEM=/opt/Actian/VectorX1 WARNING_VALUE=1073741824 CRITICAL_VALUE=2147483648
@@ -145,7 +145,7 @@ OK: LOG file is currently 815.1 MB (MQI)|log_file_size: log_file_size=854727439 
 Location of LOG file: hdfs://padb-cluster:8020/Actian/VectorX1/ingres/data/vectorwise/xerox/CBM
 ```
 
-#####Test: 6 - SMARTCTL (Dell & Cisco) disk status
+##### Test: 6 - SMARTCTL (Dell & Cisco) disk status
 
 ```
 Disks OK: 96  (MQI)|smartctl_disks: disk_ok=96 disk_warn=0 disk_crit=0 PARAMETERS: TEST=6
@@ -160,7 +160,7 @@ OK: 172.16.68.2 /dev/sdi
 <<< SNIP >>>
 ```
 
-#####Test: 7 - Network errors
+##### Test: 7 - Network errors
 
 ```
 Links OK: 20  (MQI)|link_status: nic_ok=20 nic_warn=0 nic_crit=0 PARAMETERS: TEST=7 WARNING_PERCENT=10 CRITICAL_PERCENT=20
@@ -174,7 +174,7 @@ OK: Node: 172.16.68.4 NIC: eth0 TX Packets: 119266578  TX Errors: 0 (0%) RX Pack
 <<< SNIP >>>
 ```
 
-#####Test: 8 - SWAP usage
+##### Test: 8 - SWAP usage
 
 ```
 SWAP OK: 6  (MQI)|swap_usage: swap_ok=6 swap_warn=0 swap_crit=0 PARAMETERS: TEST=8 WARNING_PERCENT=10 CRITICAL_PERCENT=20
@@ -186,7 +186,7 @@ OK: Node: 172.16.68.6 SWAP(GB) Total: 181 Used: 0 (0%) Free: 181
 OK: Node: 172.16.68.7 SWAP(GB) Total: 3 Used: 0 (0%) Free: 3
 ```
 
-#####Test: 9 - hard ulimit file descriptors
+##### Test: 9 - hard ulimit file descriptors
 
 ```
 Hard File Descriptor ULIMIT OK: 5 Hard File Descriptor ULIMIT Critical: 1  (MQI)|hard_fd_ulimit: fd_ulimit_ok=5 fd_ulimit_warn=0 fd_ulimit_crit=1 PARAMETERS: TEST=9 WARNING_VALUE=10000 CRITICAL_VALUE=10000
@@ -198,7 +198,7 @@ OK: Node: 172.16.68.6 Hard File Descriptor Limit: 65000 is fine (required value 
 CRITICAL: Node: 172.16.68.7 Hard File Descriptor Limit: 4096 is less than the required value of 10000
 ```
 
-#####Test: 10 - soft ulimit file descriptors
+##### Test: 10 - soft ulimit file descriptors
 
 ```
 Soft File Descriptor ULIMIT OK: 4 Soft File Descriptor ULIMIT Critical: 2  (MQI)|hard_fd_ulimit: fd_ulimit_ok=4 fd_ulimit_warn=0 fd_ulimit_crit=2 PARAMETERS: TEST=10 WARNING_VALUE=10000 CRITICAL_VALUE=10000
@@ -210,7 +210,7 @@ OK: Node: 172.16.68.6 Soft File Descriptor Limit: 65000 is fine (required value 
 CRITICAL: Node: 172.16.68.7 Soft File Descriptor Limit: 1024 is less than the required value of 10000
 ```
 
-#####Test: 11 - max files limits
+##### Test: 11 - max files limits
 
 ```
 Max Files Limit OK: 6  (MQI)|max_files_limit: max_files_limit_ok=6 max_files_limit_warn=0 max_files_limit_crit=0 PARAMETERS: TEST=11 WARNING_VALUE=10000 CRITICAL_VALUE=10000
@@ -222,7 +222,7 @@ OK: Node: 172.16.68.6 Max Files Limit: 19709146 is fine (required value of 10000
 OK: Node: 172.16.68.7 Max Files Limit: 19709105 is fine (required value of 10000)
 ```
 
-#####Test: 12 - per process inuse file descriptors
+##### Test: 12 - per process inuse file descriptors
 
 ```
 File Descriptor usage OK: 39 File Descriptor usage Warning: 1 File Descriptor usage Critical: 1  (MQI)|process_fd_usage: fd_ok=39 fd_warn=1 fd_crit=1 PARAMETERS: TEST=12 WARNING_PERCENT=20 CRITICAL_PERCENT=30
@@ -251,7 +251,7 @@ Node: 172.16.68.5:
 <<< SNIP >>>
 ```
 
-#####Test: 13 - total inuse file descriptors
+##### Test: 13 - total inuse file descriptors
 
 ```
 Total File Descriptor usage OK: 6  (MQI)|total_fd_usage: fd_ok=6 fd_warn=0 fd_crit=0 PARAMETERS: TEST=13 WARNING_PERCENT=20 CRITICAL_PERCENT=30
