@@ -5,9 +5,9 @@
 #### Overview
 This Linux BASH script can be used to check the health status of a number of metrics in a VectorH cluster.
 
-This application was initially developed as part of Actian Services' Enterprise Monitoring Application (EMA) - a solution developed to provide monitoring and alerting of Actian's products and based on the Nagios framework.
+This application was initially developed as part of Actian Professional Services' Enterprise Monitoring Appliance (EMA) - a solution developed to provide monitoring and alerting of Actian's products, based on the Nagios framework.
 
-Although designed to be an integral part of the EMA, where montoring and alerting are provided, along with historic performance data capture and integration with other components of EMA, this application can also be used in isolation to check the health status of a cluster on an ad-hoc basis.
+Although designed to be an integral part of the EMA, where monitoring and alerting are provided, along with historic performance data capture and integration with other components of EMA, this application can also be used in isolation to check the health status of a cluster on an ad-hoc basis.
 
 To support this application, a couple of other scripts are also required (mqi and ema_common_library_functions).  These are also provided within this project, and need to be present in the same directory as the ema_check_vector_mqi application.
 
